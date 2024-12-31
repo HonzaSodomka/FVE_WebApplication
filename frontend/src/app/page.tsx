@@ -10,7 +10,7 @@ export default function Home() {
         
         <div className="flex gap-4 justify-center">
           <Button variant="default">
-            Primary Button
+            Primary Button 1
           </Button>
           <Button variant="secondary">
             Secondary Button

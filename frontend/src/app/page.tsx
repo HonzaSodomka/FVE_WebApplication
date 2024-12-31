@@ -5,7 +5,7 @@ export default function Home() {
     <main className="flex min-h-screen flex-col items-center justify-center p-24 bg-slate-100">
       <div className="space-y-8 text-center">
         <h1 className="text-4xl font-bold text-slate-900">
-          Welcome to Next.js + shadcn/ui
+          Welcome to FVE Web App
         </h1>
         
         <div className="flex gap-4 justify-center">

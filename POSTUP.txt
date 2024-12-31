@@ -1,0 +1,23 @@
+git init
+1. FRONTEND:
+    npx create-next-app@latest frontend
+    cd frontend
+    npm install shadcn
+    npx shadcn@latest init
+    npx shadcn@latest add button (příklad jak přidan komponentu)
+    Dockerfile
+
+2. BACKEND:
+    python -m venv venv
+    venv\Scripts\activate
+    pip install django
+    django-admin startproject core .
+    python manage.py startapp api
+    INSTALLED_APPS = [
+    ...
+    'api',  # přidejte toto
+    ]
+    Dockerfile
+    pip freeze > requirements.txt
+
+3. DOCKER COMPOSE YML

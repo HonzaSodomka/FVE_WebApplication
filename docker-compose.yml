@@ -1,0 +1,13 @@
+version: '3'
+services:
+  frontend:
+    build: ./frontend  # cesta k Next.js projektu
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://backend:8000  # pro komunikaci s backendem
+
+  backend:
+    build: ./backend   # cesta k Django projektu
+    ports:
+      - "8000:8000"

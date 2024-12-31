@@ -41,4 +41,5 @@ git init
     sudo chown vas-username:vas-username vas-projekt
     cd vas-projekt
     git clone https://github.com/vase-username/vas-projekt.git .
-    docker compose up -d
+    přidání bijec.nti.tul.cz do ALLOWED_HOSTS
+    docker compose up -d --build

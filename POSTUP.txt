@@ -21,3 +21,8 @@ git init
     pip freeze > requirements.txt
 
 3. DOCKER COMPOSE YML
+
+4. GIT
+    gitignore
+    git add .
+    git commit -m "Initial commit"

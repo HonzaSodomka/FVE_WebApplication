@@ -1,0 +1,31 @@
+# Dependencies
+**/node_modules
+**/.pnp
+**/.pnp.js
+
+# Testing
+**/coverage
+
+# Next.js
+**/.next/
+**/out/
+
+# Production
+**/build
+**/dist
+
+# Python
+**/__pycache__/
+**/*.py[cod]
+**/venv/
+
+# Environment
+.env
+.env*.local
+
+# Docker
+**/postgres_data
+
+# IDEs
+.vscode
+.idea

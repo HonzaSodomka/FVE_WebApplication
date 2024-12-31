@@ -26,3 +26,19 @@ git init
     gitignore
     git add .
     git commit -m "Initial commit"
+    git remote add origin https://github.com/vase-username/nazev-repo.git
+    git branch -M main
+    git push -u origin main
+
+5. NASAZENÍ NA SERVER
+    sudo apt update
+    sudo apt install docker.io docker-compose git
+    sudo systemctl start docker
+    sudo systemctl enable docker
+    sudo usermod -aG docker $USER
+    cd /var/www/
+    sudo mkdir vas-projekt
+    sudo chown vas-username:vas-username vas-projekt
+    cd vas-projekt
+    git clone https://github.com/vase-username/vas-projekt.git .
+    docker compose up -d

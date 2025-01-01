@@ -43,3 +43,10 @@ git init
     git clone https://github.com/vase-username/vas-projekt.git .
     přidání bijec.nti.tul.cz do ALLOWED_HOSTS
     docker compose up -d --build
+
+6. GITHUB ACTIONS
+    Pomocí privátního klíče a username se github po pushi přihlásí na server
+    Pullne nejnovější změny z GitHubu
+    Zastaví a odstraní běžící Docker containery
+    Buildne nové Docker images pro frontend i backend
+    Spustí nové containery pomocí docker-compose

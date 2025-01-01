@@ -1,11 +1,12 @@
 version: '3'
 services:
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      args:
+        - NEXT_PUBLIC_API_URL=http://bijec.nti.tul.cz:8000
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://bijec.nti.tul.cz:8000
 
   backend:
     build: ./backend

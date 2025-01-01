@@ -1,13 +1,29 @@
 version: '3'
 services:
   frontend:
-    build: ./frontend  # cesta k Next.js projektu
+    build: ./frontend
     ports:
       - "3000:3000"
-    environment:
-      - NEXT_PUBLIC_API_URL=http://backend:8000  # pro komunikaci s backendem
 
   backend:
-    build: ./backend   # cesta k Django projektu
+    build: ./backend
     ports:
       - "8000:8000"
+    depends_on:
+      - db
+    environment:
+      - DATABASE_URL=postgres://postgres:heslo@db:5432/fve_db
+
+  db:
+    image: postgres:latest
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=fve_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=heslo
+    ports:
+      - "5432:5432"
+
+volumes:
+  postgres_data:

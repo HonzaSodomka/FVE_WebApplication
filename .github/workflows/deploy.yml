@@ -5,6 +5,10 @@ on:
     branches:
       - main
 
+concurrency: 
+  group: production_environment
+  cancel-in-progress: true
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -26,5 +30,7 @@ jobs:
           ssh soda@bijec.nti.tul.cz "\
             cd /var/www/FVE_WebApplication && \
             git pull && \
-            docker-compose down && \
-            docker-compose up -d --build"
+            docker-compose down --remove-orphans && \
+            docker ps -a | grep 'fve_webapplication' | awk '{print $1}' | xargs -r docker rm -f && \
+            docker-compose up -d --build && \
+            docker-compose exec -T backend python manage.py migrate"

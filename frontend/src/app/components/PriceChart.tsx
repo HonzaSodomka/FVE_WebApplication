@@ -12,6 +12,8 @@ interface PriceData {
   level_num: number;
 }
 
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000';
+
 const getLevelColor = (level: string) => {
   switch (level) {
     case 'high': return '#ef4444';
@@ -31,7 +33,7 @@ export default function PriceChart() {
       try {
         // Formátování datumu na lokální čas
         const formattedDate = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
-        const response = await fetch(`http://localhost:8000/api/prices/?date=${formattedDate}`);
+        const response = await fetch(`${API_URL}/api/prices/?date=${formattedDate}`);
         const data = await response.json();
 
         if (data.prices.length === 0) {

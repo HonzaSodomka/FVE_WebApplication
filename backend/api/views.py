@@ -6,13 +6,19 @@ from datetime import datetime
 def hello_world(request):
     return JsonResponse({"message": "Hello from Django!"})
 
+import logging
+logger = logging.getLogger(__name__)
+
 def get_prices(request):
     date_str = request.GET.get('date')
-    print(f"Received date string: '{date_str}'")  # přidáme quotes abychom viděli přesný string
+    logger.info(f"Received date string: '{date_str}'")
     
     try:
         date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        logger.info(f"Parsed date: {date}")
+        
         prices = PriceData.objects.filter(date=date)
+        logger.info(f"Found prices: {prices.count()}")
         
         data = [{
             'hour': price.hour,
@@ -23,5 +29,5 @@ def get_prices(request):
         
         return JsonResponse({'prices': data})
     except Exception as e:
-        print(f"Error: {type(e).__name__} - {str(e)}")  # detailnější error
-        return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
+        logger.error(f"Error: {type(e).__name__} - {str(e)}")
+        return JsonResponse({'error': f'Invalid date format. Use YYYY-MM-DD. Error: {str(e)}'}, status=400)

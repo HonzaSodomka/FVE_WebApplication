@@ -50,3 +50,5 @@ git init
     Zastaví a odstraní běžící Docker containery
     Buildne nové Docker images pro frontend i backend
     Spustí nové containery pomocí docker-compose
+
+DOPLNIT CORS, FRONTEND BACKEND GRAF 

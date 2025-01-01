@@ -8,15 +8,12 @@ def hello_world(request):
 
 def get_prices(request):
     date_str = request.GET.get('date')
+    print(f"Received date string: '{date_str}'")  # přidáme quotes abychom viděli přesný string
     
     try:
-        # Převod datumu z formátu YYYY-MM-DD
         date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        
-        # Získání dat pro daný den
         prices = PriceData.objects.filter(date=date)
         
-        # Příprava dat pro JSON
         data = [{
             'hour': price.hour,
             'price_czk': price.price_czk,
@@ -25,5 +22,6 @@ def get_prices(request):
         } for price in prices]
         
         return JsonResponse({'prices': data})
-    except:
+    except Exception as e:
+        print(f"Error: {type(e).__name__} - {str(e)}")  # detailnější error
         return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)

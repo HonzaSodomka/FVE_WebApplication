@@ -1,6 +1,6 @@
 
 from django.http import JsonResponse
-from .models import PriceData
+from .models import PriceData, SolarData
 from datetime import datetime
 
 def hello_world(request):
@@ -31,3 +31,40 @@ def get_prices(request):
     except Exception as e:
         logger.error(f"Error: {type(e).__name__} - {str(e)}")
         return JsonResponse({'error': f'Invalid date format. Use YYYY-MM-DD. Error: {str(e)}'}, status=400)
+    
+def get_solar_prediction(request):
+    date_str = request.GET.get('date')
+    
+    try:
+        # Převod datumu z formátu YYYY-MM-DD
+        date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        
+        # Získání dat pro daný den
+        solar_data = SolarData.objects.filter(
+            timestamp__date=date
+        ).order_by('timestamp')
+        
+        # Příprava dat pro JSON
+        data = [{
+            'timestamp': solar.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'watts': solar.watts,
+            'watt_hours_period': solar.watt_hours_period,
+            'watt_hours_cumulative': solar.watt_hours_cumulative,
+            'hour': solar.timestamp.hour  # Přidáno pro kompatibilitu s frontend
+        } for solar in solar_data]
+        
+        # Přidání denního součtu
+        daily_total = solar_data.last().watt_hours_cumulative if solar_data.exists() else 0
+        
+        response = {
+            'predictions': data,
+            'daily_total': daily_total
+        }
+        
+        return JsonResponse(response)
+        
+    except Exception as e:
+        return JsonResponse({
+            'error': 'Invalid date format. Use YYYY-MM-DD',
+            'detail': str(e)
+        }, status=400)

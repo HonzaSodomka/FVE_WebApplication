@@ -15,3 +15,18 @@ class PriceData(models.Model):
 
     def __str__(self):
         return f"{self.date} {self.hour}:00 - {self.price_czk} CZK ({self.level})"
+
+class SolarData(models.Model):
+    timestamp = models.DateTimeField()
+    watts = models.FloatField(null=True)  # Okamžitý výkon
+    watt_hours_period = models.FloatField()  # Výroba za danou periodu
+    watt_hours_cumulative = models.FloatField()  # Kumulativní výroba za den
+    
+    class Meta:
+        indexes = [
+            models.Index(fields=['timestamp']),
+        ]
+        ordering = ['timestamp']
+
+    def __str__(self):
+        return f"{self.timestamp}: {self.watt_hours_period} Wh"

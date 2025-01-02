@@ -5,13 +5,12 @@ services:
       context: ./frontend
       args:
         - NODE_ENV=${NODE_ENV:-development}
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://bijec.nti.tul.cz:8000}
     ports:
       - "3000:3000"
     environment:
       - NODE_ENV=${NODE_ENV:-development}
-      - NEXT_PUBLIC_API_URL=http://backend:8000
-      - NODE_OPTIONS="--max-old-space-size=2048"
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://bijec.nti.tul.cz:8000}
     command: sh -c "if [ \"$NODE_ENV\" = \"production\" ]; then npm run start; else npm run dev; fi"
     deploy:
       resources:

@@ -11,6 +11,7 @@ services:
     environment:
       - NODE_ENV=${NODE_ENV:-development}
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+      - NODE_OPTIONS="--max-old-space-size=2048"
     command: sh -c "if [ \"$NODE_ENV\" = \"production\" ]; then npm run start; else npm run dev; fi"
     deploy:
       resources:
@@ -56,3 +57,4 @@ services:
 
 volumes:
   postgres_data:
+    name: fve_webapplication_postgres_data

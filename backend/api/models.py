@@ -17,7 +17,7 @@ class PriceData(models.Model):
         return f"{self.date} {self.hour}:00 - {self.price_czk} CZK ({self.level})"
 
 class SolarData(models.Model):
-    timestamp = models.DateTimeField()
+    timestamp = models.DateTimeField(unique=True)
     watts = models.FloatField(null=True)  # Okamžitý výkon
     watt_hours_period = models.FloatField()  # Výroba za danou periodu
     watt_hours_cumulative = models.FloatField()  # Kumulativní výroba za den

@@ -1,4 +1,3 @@
-
 from django.http import JsonResponse
 from .models import PriceData, SolarData
 from datetime import datetime
@@ -6,20 +5,17 @@ from datetime import datetime
 def hello_world(request):
     return JsonResponse({"message": "Hello from Django!"})
 
-import logging
-logger = logging.getLogger(__name__)
-
 def get_prices(request):
     date_str = request.GET.get('date')
-    logger.info(f"Received date string: '{date_str}'")
     
     try:
+        # Převod datumu z formátu YYYY-MM-DD
         date = datetime.strptime(date_str, '%Y-%m-%d').date()
-        logger.info(f"Parsed date: {date}")
         
+        # Získání dat pro daný den
         prices = PriceData.objects.filter(date=date)
-        logger.info(f"Found prices: {prices.count()}")
         
+        # Příprava dat pro JSON
         data = [{
             'hour': price.hour,
             'price_czk': price.price_czk,
@@ -28,9 +24,8 @@ def get_prices(request):
         } for price in prices]
         
         return JsonResponse({'prices': data})
-    except Exception as e:
-        logger.error(f"Error: {type(e).__name__} - {str(e)}")
-        return JsonResponse({'error': f'Invalid date format. Use YYYY-MM-DD. Error: {str(e)}'}, status=400)
+    except:
+        return JsonResponse({'error': 'Invalid date format. Use YYYY-MM-DD'}, status=400)
     
 def get_solar_prediction(request):
     date_str = request.GET.get('date')

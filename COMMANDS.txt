@@ -1,0 +1,36 @@
+Docker:
+# Build a spuštění
+docker-compose up --build
+docker-compose up -d --build  # detached mode (na pozadí)
+docker-compose down  # vypnutí
+docker ps  # zobrazí běžící kontejnery
+docker logs fve_webapplication-backend-1  # zobrazí logy kontejneru
+docker system prune -a --volumes  # vyčistí nepoužívané images a volumes
+# Exekuce příkazů v kontejneru
+docker-compose exec backend python manage.py makemigrations
+docker-compose exec backend python manage.py migrate
+docker-compose exec backend python scripts/save_prices.py
+docker-compose exec db psql -U postgres fve_db  # připojení do postgres
+
+Git:
+git add .
+git commit -m "message"
+git push
+git pull
+
+Postgres:
+\q  # odchod z postgres shellu
+SELECT * FROM api_pricedata;  # zobrazení dat
+
+Migrace DB:
+docker-compose exec backend python manage.py makemigrations
+docker-compose exec backend python manage.py migrate
+
+Spouštění skriptu v kontejneru:
+docker-compose exec backend python scripts/save_prices.py
+
+Sever crond:
+crontab -e  # editace cron 
+
+Shadcn:
+npx shadcn@latest add table

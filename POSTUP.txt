@@ -6,6 +6,8 @@ git init
     npx shadcn@latest init
     npx shadcn@latest add button (příklad jak přidan komponentu)
     Dockerfile
+    npm install recharts     # pro grafy
+    
 
 2. BACKEND:
     python -m venv venv
@@ -51,4 +53,8 @@ git init
     Buildne nové Docker images pro frontend i backend
     Spustí nové containery pomocí docker-compose
 
-DOPLNIT CORS, FRONTEND BACKEND GRAF 
+7. ŘEŠENÍ CORS PROBLÉMŮ PŘI NASAZENÍ NA SEVRER
+
+8. DOPLNĚNÍ ROZDÍLU MEZI DEPLOYMENTEM NA LOCALHOSTU A NA SERVERU - ROZDÍL V API URLS
+
+9. PRICE CHARTS A CELÝ 

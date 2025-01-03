@@ -117,7 +117,7 @@ export default function SolarDataChart({ date }: { date: Date }) {
           <AlertDescription>{error}</AlertDescription>
         </Alert>
       ) : (
-        <div className="h-[250px] md:h-80 w-full">
+        <div className="h-80 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <LineChart
               data={solarData}

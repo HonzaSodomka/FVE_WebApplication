@@ -32,5 +32,6 @@ jobs:
             git pull && \
             docker-compose down --remove-orphans && \
             docker ps -a | grep 'fve_webapplication' | awk '{print $1}' | xargs -r docker rm -f && \
+            docker system prune -af && \
             docker-compose up -d --build && \
             docker-compose exec -T backend python manage.py migrate"

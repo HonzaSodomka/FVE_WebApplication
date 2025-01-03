@@ -5,7 +5,7 @@ docker-compose up -d --build  # detached mode (na pozadí)
 docker-compose down  # vypnutí
 docker ps  # zobrazí běžící kontejnery
 docker logs fve_webapplication-backend-1  # zobrazí logy kontejneru
-docker system prune -a --volumes  # vyčistí nepoužívané images a volumes
+docker system prune -a --volumes  # vyčistí nepoužívané images, BEZ --VOLUMES ZACHOVÁ VOLUMES > LEPŠÍ
 # Exekuce příkazů v kontejneru
 docker-compose exec backend python manage.py makemigrations
 docker-compose exec backend python manage.py migrate

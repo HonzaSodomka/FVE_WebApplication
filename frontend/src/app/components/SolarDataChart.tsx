@@ -174,6 +174,25 @@ export default function SolarDataChart({ date }: { date: Date }) {
           </ResponsiveContainer>
         </div>
       )}
+      {!error && (
+        <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-2 text-sm text-gray-600">
+          <h3 className="font-semibold text-gray-700">
+            Parametry FVE systému:
+          </h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <p>Lokalita: TUL budova A</p>
+              <p>Zeměpisná šířka: 50.7728417°</p>
+              <p>Zeměpisná délka: 15.0721458°</p>
+            </div>
+            <div>
+              <p>Sklon panelů: 30°</p>
+              <p>Azimut: 0° (orientace na jih)</p>
+              <p>Instalovaný výkon: 20 kWp</p>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

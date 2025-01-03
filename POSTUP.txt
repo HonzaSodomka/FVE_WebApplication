@@ -55,6 +55,12 @@ git init
 
 7. ŘEŠENÍ CORS PROBLÉMŮ PŘI NASAZENÍ NA SEVRER
 
-8. DOPLNĚNÍ ROZDÍLU MEZI DEPLOYMENTEM NA LOCALHOSTU A NA SERVERU - ROZDÍL V API URLS
+8. DOPLNĚNÍ ROZDÍLU MEZI DEPLOYMENTEM NA LOCALHOSTU A NA SERVERU
+    rozdíl mezi localhost a bijec.nti.tul.cz
+    řešeno přes .env na localu, jinak se použije bijec
 
-9. PRICE CHARTS A CELÝ 
+9. PRICE CHARTS A SOLAR CHARTS
+    + zavedení admineru pro správu databáze
+
+10. PAMĚŤ
+    v docker compose navýšena paměť (na serveru byly problémy)

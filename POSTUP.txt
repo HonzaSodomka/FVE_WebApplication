@@ -63,4 +63,4 @@ git init
     + zavedení admineru pro správu databáze
 
 10. PAMĚŤ
-    v docker compose navýšena paměť (na serveru byly problémy)
+    v docker compose navýšena paměť (na serveru byly problémy) 

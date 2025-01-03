@@ -29,3 +29,7 @@
 # IDEs
 .vscode
 .idea
+
+# Django migrations
+backend/*/migrations/*.py
+!backend/*/migrations/__init__.py

@@ -87,10 +87,13 @@ export default function PriceChart({ date }: { date: Date }) {
     ...price,
     time: `${String(price.hour).padStart(2, "0")}:00`,
     color: getLevelColor(price.level),
+    // Přidáme přepočet ceny na kWh
+    price_czk_kwh: price.price_czk / 1000
   }));
 
+  // Průměrná cena také přepočtena na kWh
   const averagePrice =
-    prices.reduce((sum, price) => sum + price.price_czk, 0) / prices.length;
+    prices.reduce((sum, price) => sum + price.price_czk, 0) / prices.length / 1000;
 
   return (
     <div className="space-y-6 bg-white p-6 rounded-xl shadow-lg border border-gray-200">
@@ -159,7 +162,7 @@ export default function PriceChart({ date }: { date: Date }) {
                       return (
                         <div className="bg-white p-3 border rounded-lg shadow">
                           <p className="font-bold">{data.time}</p>
-                          <p>Cena: {data.price_czk} Kč/kWh</p>
+                          <p>Cena: {(data.price_czk / 1000).toFixed(2)} Kč/kWh</p>
                           <p className="capitalize">Úroveň: {data.level}</p>
                         </div>
                       );
@@ -173,7 +176,7 @@ export default function PriceChart({ date }: { date: Date }) {
                   strokeDasharray="3 3"
                 />
                 <Bar
-                  dataKey="price_czk"
+                  dataKey="price_czk_kwh"
                   shape={(props: unknown) => {
                     const { x, y, width, height, payload } = props as BarProps;
                     return (

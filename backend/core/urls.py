@@ -18,6 +18,8 @@ from django.contrib import admin
 from django.urls import path, include
 
 urlpatterns = [
+    #Admin požadavky směřují do admin rozhraní
     path('admin/', admin.site.urls),
+    #Api požadavky směřují do api/urls
     path('api/', include('api.urls')),
 ]

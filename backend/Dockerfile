@@ -5,6 +5,7 @@ WORKDIR /app
 # Instalace netcat pro kontrolu databáze
 RUN apt-get update && apt-get install -y netcat-traditional
 
+#Instalace věcí z requirements
 COPY requirements.txt .
 RUN pip install -r requirements.txt
 

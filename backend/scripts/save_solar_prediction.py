@@ -18,7 +18,9 @@ def fetch_solar_forecast():
         'X-Separator': ';'
     }
     
+    #Volání api url s hlavičkama
     response = requests.get(url, headers=headers)
+    #200 = success
     if response.status_code == 200:
         return response.json()
     else:
@@ -37,12 +39,13 @@ def save_solar_forecast():
         data = fetch_solar_forecast()
         tomorrow = (date.today() + timedelta(days=1)).strftime('%Y-%m-%d')
         
-        # Zpracování dat z watthours_period
+        # Najde timestamp v první části json dat (u wh_period) a když splní že je pro zítřek, vytáhne i zbytek dat a uloží do db
         for timestamp_str, wh_period in data['result']['watt_hours_period'].items():
             # Kontrola jestli je záznam pro zítřejší den
             if timestamp_str.startswith(tomorrow):
                 timestamp = datetime.strptime(timestamp_str, '%Y-%m-%d %H:%M:%S')
                 
+                #Vytáhne data pro zvolený den
                 watts = data['result']['watts'].get(timestamp_str, 0)
                 wh_cumulative = data['result']['watt_hours'].get(timestamp_str, 0)
                 
@@ -64,6 +67,7 @@ def save_solar_forecast():
         conn.commit()
         print(f"Solární predikce pro {tomorrow} byla úspěšně uložena")
         
+    #Stejné jako u svae_prices
     except Exception as e:
         print(f"Chyba při ukládání solární predikce: {e}")
         conn.rollback()

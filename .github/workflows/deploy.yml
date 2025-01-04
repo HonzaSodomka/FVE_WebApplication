@@ -1,10 +1,12 @@
 name: Deploy to Production
 
+#Spouští se při pushi na main
 on:
   push:
     branches:
       - main
 
+#Když přidje druhý push během nasazování předchozího, ten předchozí se zruší
 concurrency: 
   group: production_environment
   cancel-in-progress: true
@@ -13,8 +15,10 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      #Stáhne virtuálně kód na ubuntu virt stroj
       - uses: actions/checkout@v2
       
+      #Nastavuje privátní klíč pro ssh připojení k serveru
       - name: Install SSH key
         uses: shimataro/ssh-key-action@v2
         with:
@@ -22,9 +26,11 @@ jobs:
           known_hosts: unnecessary
           if_key_exists: replace
           
+      #Nastavuje cílový server mezi známé hostitele (důvěřuje mu)
       - name: Adding Known Hosts
         run: ssh-keyscan -H bijec.nti.tul.cz >> ~/.ssh/known_hosts
       
+      #Deploy přes ssh (jako bych to dělal ručně v cmd)
       - name: Deploy with SSH
         run: |
           ssh soda@bijec.nti.tul.cz "\

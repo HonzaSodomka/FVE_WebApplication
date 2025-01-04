@@ -25,6 +25,7 @@ SECRET_KEY = 'django-insecure-!952hz4p!#(i5hag!*y!$!sx2ac%kr@!o4)+%(uodh4&pahodx
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
+# Seznam hostů, kterým django dovolí přístup
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
@@ -34,6 +35,7 @@ ALLOWED_HOSTS = [
 
 # Application definition
 
+#Aplikace, které django používá
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -45,6 +47,7 @@ INSTALLED_APPS = [
     'corsheaders',
 ]
 
+#Seznam "kontrol", kterými prochází požadavky
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
@@ -56,6 +59,7 @@ MIDDLEWARE = [
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
 
+#Kde hledat hlavní url config
 ROOT_URLCONF = 'core.urls'
 
 TEMPLATES = [
@@ -80,6 +84,7 @@ WSGI_APPLICATION = 'core.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
 
+#Konfigurace pro připojení k PostgreSQL
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.postgresql',
@@ -116,7 +121,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Europe/Prague'
 
 USE_I18N = True
 
@@ -133,12 +138,14 @@ STATIC_URL = 'static/'
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
+#Kdo může dělat požadavky na api
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://bijec.nti.tul.cz:3000",
     "http://bijec.nti.tul.cz"
 ]
 
+#Nastavení logování
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,

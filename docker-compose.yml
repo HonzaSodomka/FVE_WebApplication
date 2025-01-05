@@ -31,6 +31,7 @@ services:
       - DATABASE_URL=postgres://postgres:heslo@db:5432/fve_db  # Připojení k DB
     volumes:  # Perzistentní uložení migrací
       - ./backend/api/migrations:/app/api/migrations
+      - backend_logs:/app/logs
 
   db:
     image: postgres:latest  # Oficiální Postgres image
@@ -60,3 +61,4 @@ services:
 volumes:
   postgres_data:
     name: fve_webapplication_postgres_data  # Pojmenovaný volume pro DB data
+  backend_logs:

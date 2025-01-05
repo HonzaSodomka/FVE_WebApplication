@@ -149,13 +149,35 @@ CORS_ALLOWED_ORIGINS = [
 LOGGING = {
     'version': 1,
     'disable_existing_loggers': False,
+    'formatters': {
+        'verbose': {
+            # Formát - čas, úroveň logu, modul a zpráva
+            'format': '[{asctime}] {levelname} {module}: {message}',
+            'style': '{',
+        },
+    },
     'handlers': {
         'console': {
             'class': 'logging.StreamHandler',
+            'formatter': 'verbose',
         },
+        'file': {
+            'class': 'logging.FileHandler',
+            'filename': '/app/logs/django.log',
+            'formatter': 'verbose',
+        }
     },
-    'root': {
-        'handlers': ['console'],
-        'level': 'INFO',
-    },
+    'loggers': {
+        # Logger pro Django
+        'django': {
+            'handlers': ['console', 'file'],
+            'level': 'INFO',
+        },
+        # Logger pro api
+        'api': {
+            'handlers': ['console', 'file'],
+            'level': 'DEBUG', 
+            'propagate': True,
+        }
+    }
 }

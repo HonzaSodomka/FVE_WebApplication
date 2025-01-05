@@ -6,6 +6,7 @@ import SolarDataChart from "./components/SolarDataChart";
 import { DatePicker } from "@/components/ui/date-picker";
 
 export default function Home() {
+  //Nastavení data - výchozí je dnešek
   const [date, setDate] = useState<Date>(() => new Date());
 
   return (
@@ -19,6 +20,7 @@ export default function Home() {
             <p className="text-lg text-gray-600">
               Přehled cen elektřiny a solární produkce
             </p>
+            {/*Výber data*/}
             <DatePicker date={date} onSelect={setDate} />
           </div>
         </header>

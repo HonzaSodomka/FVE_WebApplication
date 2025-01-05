@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+//Pro type checking při vývoji - interfaces
 interface PriceData {
   hour: number;
   price_czk: number;
@@ -56,19 +57,23 @@ export default function PriceChart({ date }: { date: Date }) {
   const [prices, setPrices] = useState<PriceData[]>([]);
   const [error, setError] = useState<string>("");
 
+  //Načítá data při změně datumu
   useEffect(() => {
     const fetchPrices = async () => {
       try {
+        //Naformátuje datum a zeptá se api jestli existuje záznam pro něj
         const formattedDate = format(date, "yyyy-MM-dd");
         const response = await fetch(
           `${API_URL}/api/prices/?date=${formattedDate}`
         );
         const data = await response.json();
 
+        //Pokud není záznam, nastaví 'chybovou' hlášku
         if (data.prices.length === 0) {
           setError(`Pro datum ${formattedDate} nejsou k dispozici žádná data.`);
           setPrices([]);
         } else {
+          //Pokud je záznam seřadí data podle hodin a nastaví je
           setError("");
           setPrices(
             data.prices.sort((a: PriceData, b: PriceData) => a.hour - b.hour)
@@ -83,20 +88,23 @@ export default function PriceChart({ date }: { date: Date }) {
     fetchPrices();
   }, [date]);
 
+  // Nastavuje data pro tabulku - nastavení hodiny, barvy a přepočet z ceny za MWh na kWh
   const chartData = prices.map((price) => ({
     ...price,
     time: `${String(price.hour).padStart(2, "0")}:00`,
     color: getLevelColor(price.level),
-    // Přidáme přepočet ceny na kWh
-    price_czk_kwh: price.price_czk / 1000
+    price_czk_kwh: price.price_czk / 1000,
   }));
 
   // Průměrná cena také přepočtena na kWh
   const averagePrice =
-    prices.reduce((sum, price) => sum + price.price_czk, 0) / prices.length / 1000;
+    prices.reduce((sum, price) => sum + price.price_czk, 0) /
+    prices.length /
+    1000;
 
   return (
     <div className="space-y-6 bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+      {/* Header s nadpisem a datem */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
           <svg
@@ -119,6 +127,8 @@ export default function PriceChart({ date }: { date: Date }) {
           {format(date, "dd. MM. yyyy")}
         </span>
       </div>
+
+      {/* Zobrazení chyby nebo obsahu */}
       {error ? (
         <Alert
           variant="destructive"
@@ -128,12 +138,15 @@ export default function PriceChart({ date }: { date: Date }) {
         </Alert>
       ) : (
         <>
+          {/* Box s průměrnou cenou */}
           <div className="text-center mb-4">
             <p className="text-sm text-gray-500">Průměrná cena</p>
             <p className="text-xl font-bold text-blue-600">
               {averagePrice.toFixed(2)} Kč/kWh
             </p>
           </div>
+
+          {/* Graf */}
           <div className="h-80 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart
@@ -162,8 +175,12 @@ export default function PriceChart({ date }: { date: Date }) {
                       return (
                         <div className="bg-white p-3 border rounded-lg shadow">
                           <p className="font-bold">{data.time}</p>
-                          <p>Cena: {(data.price_czk / 1000).toFixed(2)} Kč/kWh</p>
-                          <p className="capitalize">Úroveň: {data.level}</p>
+                          <p>Cena: {data.price_czk_kwh.toFixed(2)} Kč/kWh</p>
+                          <p>
+                            Úroveň:{" "}
+                            {data.level.charAt(0).toUpperCase() +
+                              data.level.slice(1)}
+                          </p>
                         </div>
                       );
                     }
@@ -185,9 +202,7 @@ export default function PriceChart({ date }: { date: Date }) {
                         y={y}
                         width={width}
                         height={height}
-                        fill={getLevelColor(
-                          (payload as BarProps["payload"]).level
-                        )}
+                        fill={payload.color}
                         rx={4}
                         ry={4}
                       />

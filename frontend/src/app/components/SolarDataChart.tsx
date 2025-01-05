@@ -14,6 +14,7 @@ import {
 } from "recharts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+// Interface pro Solar a Chart data
 interface SolarData {
   timestamp: string;
   watts: number;
@@ -35,6 +36,7 @@ export default function SolarDataChart({ date }: { date: Date }) {
   const [dailyTotal, setDailyTotal] = useState<number>(0);
 
   useEffect(() => {
+    // Změna datumu zase vyvolá formátování data a požadavek na api
     const fetchSolarData = async () => {
       try {
         const formattedDate = format(date, "yyyy-MM-dd");
@@ -43,6 +45,7 @@ export default function SolarDataChart({ date }: { date: Date }) {
         );
         const data = await response.json();
 
+        // Chyba při prázdné odpovědi
         if (data.predictions.length === 0) {
           setError(`Pro datum ${formattedDate} nejsou k dispozici žádná data.`);
           setSolarData([]);
@@ -50,6 +53,7 @@ export default function SolarDataChart({ date }: { date: Date }) {
         } else {
           setError("");
 
+          //Vyvtvoří nulové hodnoty pro všech 24h
           const processedData = Array(24)
             .fill(null)
             .map((_, index) => ({
@@ -58,6 +62,7 @@ export default function SolarDataChart({ date }: { date: Date }) {
               wattHoursPeriod: 0,
             }));
 
+          //Existující záznamy přepíší nulové hodnoty
           data.predictions.forEach((item: SolarData) => {
             const hour = new Date(item.timestamp).getHours();
             processedData[hour] = {
@@ -79,8 +84,16 @@ export default function SolarDataChart({ date }: { date: Date }) {
     fetchSolarData();
   }, [date]);
 
+  // Konstanty pro barvy a styly
+  const CHART_COLOR = {
+    stroke: "rgba(16, 185, 129, 0.8)",
+    fill: "rgba(16, 185, 129, 0.1)",
+    dot: "#10B981",
+  };
+
   return (
     <div className="space-y-6 bg-white p-6 rounded-xl shadow-lg border border-gray-200">
+      {/* Header s nadpisem a datem */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
           <svg
@@ -103,12 +116,16 @@ export default function SolarDataChart({ date }: { date: Date }) {
           {format(date, "dd. MM. yyyy")}
         </span>
       </div>
+
+      {/* Box s denní produkcí */}
       <div className="text-center mb-4">
         <p className="text-sm text-gray-500">Celková denní produkce</p>
         <p className="text-xl font-bold text-green-600">
           {dailyTotal.toFixed(2)} kWh
         </p>
       </div>
+
+      {/* Zobrazení chyby nebo grafu */}
       {error ? (
         <Alert
           variant="destructive"
@@ -156,24 +173,27 @@ export default function SolarDataChart({ date }: { date: Date }) {
                   return null;
                 }}
               />
+              {/* Area a Line pro vizuální efekt "vyplněné oblasti pod křivkou" */}
               <Area
                 type="monotone"
                 dataKey="wattHoursPeriod"
-                stroke="rgba(16, 185, 129, 0.8)"
-                fill="rgba(16, 185, 129, 0.1)"
+                stroke={CHART_COLOR.stroke}
+                fill={CHART_COLOR.fill}
               />
               <Line
                 type="monotone"
                 dataKey="wattHoursPeriod"
-                stroke="rgba(16, 185, 129, 0.8)"
+                stroke={CHART_COLOR.stroke}
                 strokeWidth={2}
-                dot={{ r: 3, fill: "#10B981" }}
-                activeDot={{ r: 5, fill: "#10B981" }}
+                dot={{ r: 3, fill: CHART_COLOR.dot }}
+                activeDot={{ r: 5, fill: CHART_COLOR.dot }}
               />
             </LineChart>
           </ResponsiveContainer>
         </div>
       )}
+
+      {/* Informace o FVE systému - zobrazí se pouze když není error */}
       {!error && (
         <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-2 text-sm text-gray-600">
           <h3 className="font-semibold text-gray-700">

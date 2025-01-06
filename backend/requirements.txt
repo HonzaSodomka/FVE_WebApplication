@@ -5,3 +5,4 @@ tzdata==2024.2
 psycopg2-binary==2.9.9
 requests
 django-cors-headers
+django-ratelimit

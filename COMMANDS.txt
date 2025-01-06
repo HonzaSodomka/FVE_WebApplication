@@ -11,6 +11,7 @@ docker-compose exec backend python manage.py makemigrations
 docker-compose exec backend python manage.py migrate
 docker-compose exec backend python scripts/save_prices.py
 docker-compose exec db psql -U postgres fve_db  # připojení do postgres
+docker exec fve_webapplication_backend_1 cat /app/logs/django.log # logy
 
 Git:
 git add .

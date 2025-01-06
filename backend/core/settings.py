@@ -51,6 +51,7 @@ INSTALLED_APPS = [
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
+    'api.middleware.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
@@ -181,3 +182,19 @@ LOGGING = {
         }
     }
 }
+
+# Rate limiting
+RATELIMIT_ENABLE = True
+RATELIMIT_USE_CACHE = 'default'
+RATELIMIT_VIEW = 'django.http.HttpResponseForbidden'
+
+# Cache pro rate limiting
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+    }
+}
+
+SECURE_BROWSER_XSS_FILTER = True
+X_FRAME_OPTIONS = 'DENY'
+SECURE_CONTENT_TYPE_NOSNIFF = True

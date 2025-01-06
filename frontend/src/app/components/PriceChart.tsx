@@ -66,19 +66,23 @@ export default function PriceChart({ date }: { date: Date }) {
         const response = await fetch(
           `${API_URL}/api/prices/?date=${formattedDate}`
         );
+        
         const data = await response.json();
 
-        //Pokud není záznam, nastaví 'chybovou' hlášku
-        if (data.prices.length === 0) {
-          setError(`Pro datum ${formattedDate} nejsou k dispozici žádná data.`);
+        // Kontrola response status kódu
+        if (!response.ok) {
+          // Backend teď vrací chybovou zprávu v data.error
+          setError(data.error || `Pro datum ${formattedDate} nepodařilo se načíst data.`);
           setPrices([]);
-        } else {
-          //Pokud je záznam seřadí data podle hodin a nastaví je
-          setError("");
-          setPrices(
-            data.prices.sort((a: PriceData, b: PriceData) => a.hour - b.hour)
-          );
+          return;
         }
+
+        //Pokud je záznam seřadí data podle hodin a nastaví je
+        setError("");
+        setPrices(
+          data.prices.sort((a: PriceData, b: PriceData) => a.hour - b.hour)
+        );
+        
       } catch (err) {
         setError("Nepodařilo se načíst data");
         console.error(err);

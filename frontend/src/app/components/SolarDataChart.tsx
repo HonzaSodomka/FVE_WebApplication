@@ -45,39 +45,43 @@ export default function SolarDataChart({ date }: { date: Date }) {
         );
         const data = await response.json();
 
-        // Chyba při prázdné odpovědi
-        if (data.predictions.length === 0) {
-          setError(`Pro datum ${formattedDate} nejsou k dispozici žádná data.`);
+        // Kontrola response status kódu
+        if (!response.ok) {
+          setError(
+            data.error ||
+              `Pro datum ${formattedDate} se nepodařilo načíst data.`
+          );
           setSolarData([]);
           setDailyTotal(0);
-        } else {
-          setError("");
-
-          //Vyvtvoří nulové hodnoty pro všech 24h
-          const processedData = Array(24)
-            .fill(null)
-            .map((_, index) => ({
-              hour: `${String(index).padStart(2, "0")}:00`,
-              watts: 0,
-              wattHoursPeriod: 0,
-            }));
-
-          //Existující záznamy přepíší nulové hodnoty
-          data.predictions.forEach((item: SolarData) => {
-            const hour = new Date(item.timestamp).getHours();
-            processedData[hour] = {
-              hour: `${String(hour).padStart(2, "0")}:00`,
-              watts: item.watts / 1000,
-              wattHoursPeriod: item.watt_hours_period / 1000,
-            };
-          });
-
-          setSolarData(processedData);
-          setDailyTotal(data.daily_total / 1000);
+          return;
         }
+
+        setError("");
+
+        //Vytvoří nulové hodnoty pro všech 24h
+        const processedData = Array(24)
+          .fill(null)
+          .map((_, index) => ({
+            hour: `${String(index).padStart(2, "0")}:00`,
+            watts: 0,
+            wattHoursPeriod: 0,
+          }));
+
+        //Existující záznamy přepíší nulové hodnoty
+        data.predictions.forEach((item: SolarData) => {
+          const hour = new Date(item.timestamp).getHours();
+          processedData[hour] = {
+            hour: `${String(hour).padStart(2, "0")}:00`,
+            watts: item.watts / 1000,
+            wattHoursPeriod: item.watt_hours_period / 1000,
+          };
+        });
+
+        setSolarData(processedData);
+        setDailyTotal(data.daily_total / 1000);
       } catch (err) {
         setError("Nepodařilo se načíst solární data");
-        console.error(err);
+        console.error("Error fetching solar data:", err);
       }
     };
 

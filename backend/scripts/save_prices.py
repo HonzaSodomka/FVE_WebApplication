@@ -4,6 +4,14 @@ import json
 import requests
 import logging
 
+# Nastavíme logging do stejného souboru jako Django
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    filename='/app/logs/django.log',  # Stejný soubor jako používá Django
+    filemode='a'  # 'a' znamená append - přidává záznamy na konec souboru
+)
+
 logger = logging.getLogger('api')
 
 def fetch_price_data():

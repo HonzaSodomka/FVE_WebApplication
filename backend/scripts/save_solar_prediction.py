@@ -2,35 +2,14 @@ import requests
 from datetime import datetime, date, timedelta
 import psycopg2
 import json
-
-def fetch_solar_forecast():
-    latitude = 50.7728417
-    longitude = 15.0721458
-    declination = 30
-    azimuth = 0
-    power = 20  # kWp
-
-    url = f"https://api.forecast.solar/estimate/{latitude}/{longitude}/{declination}/{azimuth}/{power}"
-    
-    headers = {
-        'accept': 'application/json',
-        'X-Delimiter': '|',
-        'X-Separator': ';'
-    }
-    
-    #Volání api url s hlavičkama
-    response = requests.get(url, headers=headers)
-    #200 = success
-    if response.status_code == 200:
-        return response.json()
-    else:
-        raise Exception(f"Failed to fetch data: {response.status_code}")
-
-import requests
-from datetime import datetime, date, timedelta
-import psycopg2
-import json
 import logging
+
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    filename='/app/logs/django.log',  # Stejný soubor jako používá Django
+    filemode='a'  # 'a' znamená append - přidává záznamy na konec souboru
+)
 
 logger = logging.getLogger('api')
 
@@ -125,6 +104,3 @@ if __name__ == "__main__":
    except Exception as e:
        logger.error(f"Script failed: {str(e)}")
        raise
-
-if __name__ == "__main__":
-    save_solar_forecast()

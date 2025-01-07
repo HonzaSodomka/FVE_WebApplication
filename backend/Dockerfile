@@ -1,5 +1,11 @@
 FROM python:3.11
 
+# Instalace a nastavení časové zóny kvůli logovábí
+RUN apt-get update && \
+    apt-get install -y tzdata && \
+    ln -fs /usr/share/zoneinfo/Europe/Prague /etc/localtime && \
+    dpkg-reconfigure --frontend noninteractive tzdata
+
 WORKDIR /app
 
 # Instalace netcat pro kontrolu databáze

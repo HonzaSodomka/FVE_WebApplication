@@ -29,6 +29,7 @@ services:
         condition: service_healthy
     environment:
       - DATABASE_URL=postgres://postgres:heslo@db:5432/fve_db  # Připojení k DB
+      - TZ=Europe/Prague
     volumes:  # Perzistentní uložení migrací
       - ./backend/api/migrations:/app/api/migrations
       - backend_logs:/app/logs

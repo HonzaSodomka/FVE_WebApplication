@@ -5,13 +5,13 @@ services:
       context: ./frontend  # Cesta k frontend Dockerfile
       args:
         - NODE_ENV=${NODE_ENV:-production}  # Defaultně production
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://bijec.nti.tul.cz}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://bijec.nti.tul.cz}
         - NODE_OPTIONS="--max-old-space-size=2048"  # Zvýšení limitu paměti pro Node.js
     ports:
       - "127.0.0.1:3000:3000"  # Mapování portu hosta na port kontejneru - omezeno na localhost
     environment: 
       - NODE_ENV=${NODE_ENV:-production}
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://bijec.nti.tul.cz}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://bijec.nti.tul.cz}
       - NODE_OPTIONS="--max-old-space-size=2048"
     deploy:  # Nastavení zdrojů pro kontejner
       resources:

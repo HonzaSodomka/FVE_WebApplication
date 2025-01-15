@@ -1,0 +1,65 @@
+version: '3'
+services:
+  frontend:
+    build:
+      context: ./frontend  # Cesta k frontend Dockerfile
+      args:
+        - NODE_ENV=${NODE_ENV:-production}  # Defaultně production
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://bijec.nti.tul.cz:8000}
+        - NODE_OPTIONS="--max-old-space-size=2048"  # Zvýšení limitu paměti pro Node.js
+    ports:
+      - "127.0.0.1:3000:3000"  # Mapování portu hosta na port kontejneru - omezeno na localhost
+    environment: 
+      - NODE_ENV=${NODE_ENV:-production}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://bijec.nti.tul.cz:8000}
+      - NODE_OPTIONS="--max-old-space-size=2048"
+    deploy:  # Nastavení zdrojů pro kontejner
+      resources:
+        limits:
+          memory: 2G  # Maximální využití paměti
+        reservations:
+          memory: 512M  # Garantovaná paměť
+
+  backend:
+    build: ./backend  # Cesta k backend Dockerfile
+    ports:
+      - "127.0.0.1:8000:8000"  # Mapování portu pro API - omezeno na localhost
+    depends_on:  # Čeká na "zdravý" stav databáze
+      db:
+        condition: service_healthy
+    environment:
+      - DATABASE_URL=postgres://postgres:heslo@db:5432/fve_db  # Připojení k DB
+      - TZ=Europe/Prague
+    volumes:  # Perzistentní uložení migrací
+      - ./backend/api/migrations:/app/api/migrations
+      - backend_logs:/app/logs
+
+  db:
+    image: postgres:latest  # Oficiální Postgres image
+    volumes:
+      - postgres_data:/var/lib/postgresql/data  # Perzistentní data
+    environment:  # Nastavení databáze
+      - POSTGRES_DB=fve_db
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=heslo
+    ports:
+      - "127.0.0.1:5432:5432"  # Omezeno na localhost
+    healthcheck:  # Kontrola "zdraví" databáze
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # Adminer pro správu databáze
+  adminer:
+    image: adminer:latest
+    ports:
+      - "127.0.0.1:8080:8080"  # Webové rozhraní pro správu DB - omezeno na localhost
+    depends_on:
+      - db
+
+# Definice perzistentních volumes
+volumes:
+  postgres_data:
+    name: fve_webapplication_postgres_data  # Pojmenovaný volume pro DB data
+  backend_logs:

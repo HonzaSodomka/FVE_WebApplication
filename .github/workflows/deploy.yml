@@ -40,8 +40,8 @@ jobs:
             echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S rm -f /etc/nginx/sites-enabled/default && \
             echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S nginx -t && \
             echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S systemctl reload nginx && \
-            docker-compose down --remove-orphans && \
+            docker-compose -f docker-compose.prod.yml down --remove-orphans && \
             docker ps -a | grep 'fve_webapplication' | awk '{print $1}' | xargs -r docker rm -f && \
             docker system prune -af && \
-            docker-compose up -d --build && \
-            docker-compose exec -T backend python manage.py migrate"
+            docker-compose -f docker-compose.prod.yml up -d --build && \
+            docker-compose -f docker-compose.prod.yml exec -T backend python manage.py migrate"

@@ -64,3 +64,6 @@ git init
 
 10. PAMĚŤ
     v docker compose navýšena paměť (na serveru byly problémy) 
+
+11. Přechod na nginx
+uprava docker compose - pridani produkcni verze, uprava github workflow a pridani nginx configurace

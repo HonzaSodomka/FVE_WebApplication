@@ -1,7 +1,11 @@
 from django.http import JsonResponse
-from .models import PriceData, SolarData
+from .models import PriceData, SolarData, House
 from datetime import datetime
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 import logging
+import json
+
 
 logger = logging.getLogger('api')
 
@@ -107,3 +111,80 @@ def get_solar_prediction(request):
            'error': 'Internal server error',
            'detail': str(e)
        }, status=500)
+   
+@csrf_exempt
+@require_http_methods(["GET", "POST", "DELETE", "PATCH"])
+def houses(request):
+    if request.method == "GET":
+        try:
+            houses_list = list(House.objects.values())
+            return JsonResponse({'houses': houses_list})
+        except Exception as e:
+            logger.error(f"Error fetching houses: {str(e)}")
+            return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+        
+    elif request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            house = House.objects.create(
+                name=data['name'],
+                solar_power=data['solar_power'],
+                battery_capacity=data['battery_capacity']
+            )
+            return JsonResponse({
+                'id': house.id,
+                'name': house.name,
+                'solar_power': house.solar_power,
+                'battery_capacity': house.battery_capacity
+            }, status=201)
+        except KeyError as e:
+            return JsonResponse({'error': f'Chybějící pole: {str(e)}'}, status=400)
+        except Exception as e:
+            logger.error(f"Error creating house: {str(e)}")
+            return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+            
+    elif request.method == "DELETE":
+        try:
+            house_id = request.GET.get('id')
+            if not house_id:
+                return JsonResponse({'error': 'Chybí ID domu'}, status=400)
+                
+            house = House.objects.get(id=house_id)
+            house.delete()
+            return JsonResponse({'message': 'Dům byl odstraněn'}, status=200)
+        except House.DoesNotExist:
+            return JsonResponse({'error': 'Dům nenalezen'}, status=404)
+        except Exception as e:
+            logger.error(f"Error deleting house: {str(e)}")
+            return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+            
+    elif request.method == "PATCH":
+        try:
+            house_id = request.GET.get('id')
+            if not house_id:
+                return JsonResponse({'error': 'Chybí ID domu'}, status=400)
+                
+            house = House.objects.get(id=house_id)
+            data = json.loads(request.body)
+            
+            if 'name' in data:
+                house.name = data['name']
+            if 'solar_power' in data:
+                house.solar_power = data['solar_power']
+            if 'battery_capacity' in data:
+                house.battery_capacity = data['battery_capacity']
+            
+            house.save()
+            
+            return JsonResponse({
+                'id': house.id,
+                'name': house.name,
+                'solar_power': house.solar_power,
+                'battery_capacity': house.battery_capacity
+            })
+            
+        except House.DoesNotExist:
+            return JsonResponse({'error': 'Dům nenalezen'}, status=404)
+        except Exception as e:
+            logger.error(f"Error updating house: {str(e)}")
+            return JsonResponse({'error': 'Interní chyba serveru'}, status=500)

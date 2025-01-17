@@ -4,6 +4,8 @@ import { useState } from "react";
 import PriceChart from "./components/PriceChart";
 import SolarDataChart from "./components/SolarDataChart";
 import { DatePicker } from "@/components/ui/date-picker";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
 export default function Home() {
   //Nastavení data - výchozí je dnešek
@@ -13,14 +15,18 @@ export default function Home() {
     <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 p-8">
       <div className="max-w-7xl mx-auto">
         <header className="mb-8 bg-white p-6 rounded-lg shadow-lg">
-          <h1 className="text-3xl font-bold text-gray-800 mb-4">
-            Energetický Dashboard
-          </h1>
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-3xl font-bold text-gray-800">
+              Energetický Dashboard
+            </h1>
+            <Button asChild>
+              <Link href="/houses">Správa domů</Link>
+            </Button>
+          </div>
           <div className="flex justify-between items-center">
             <p className="text-lg text-gray-600">
               Přehled cen elektřiny a solární produkce
             </p>
-            {/*Výber data*/}
             <DatePicker date={date} onSelect={setDate} />
           </div>
         </header>

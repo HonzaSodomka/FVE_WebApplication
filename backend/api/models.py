@@ -30,3 +30,17 @@ class SolarData(models.Model):
 
     def __str__(self):
         return f"{self.timestamp}: {self.watt_hours_period} Wh"
+    
+class House(models.Model):
+    name = models.CharField(max_length=100, verbose_name="Název domu")
+    solar_power = models.FloatField(verbose_name="Výkon solárních panelů (kWp)")
+    battery_capacity = models.FloatField(verbose_name="Kapacita baterie (kWh)")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    
+    def __str__(self):
+        return f"{self.name} ({self.solar_power} kWp, {self.battery_capacity} kWh)"
+        
+    class Meta:
+        verbose_name = "Dům"
+        verbose_name_plural = "Domy"

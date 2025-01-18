@@ -3,10 +3,10 @@
 import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Trash2 } from "lucide-react";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
-import HouseDialog from "@/app/components/HouseDialog";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import { useRouter } from "next/navigation";
+import HouseDialog from "@/app/components/HouseDialog";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -35,10 +35,6 @@ export default function Page() {
     } finally {
       setIsLoading(false);
     }
-  };
-
-  const handleHouseClick = (houseId: number) => {
-    router.push(`/houses/${houseId}`);
   };
 
   useEffect(() => {
@@ -74,44 +70,36 @@ export default function Page() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {houses.map((house) => (
-                <Card
-                  key={house.id}
-                  className="hover:shadow-lg transition-shadow cursor-pointer"
-                  onClick={() => handleHouseClick(house.id)}
-                >
+                <Card key={house.id}>
                   <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <CardTitle>{house.name}</CardTitle>
-                    <div className="flex gap-2">
-                      <HouseDialog house={house} onSuccess={fetchHouses} />
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
-                        onClick={async (e) => {
-                          e.stopPropagation();
-                          if (
-                            window.confirm("Opravdu chcete smazat tento dům?")
-                          ) {
-                            try {
-                              const response = await fetch(
-                                `${API_URL}/api/houses/?id=${house.id}`,
-                                { method: "DELETE" }
-                              );
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                      onClick={async () => {
+                        if (
+                          window.confirm("Opravdu chcete smazat tento dům?")
+                        ) {
+                          try {
+                            const response = await fetch(
+                              `${API_URL}/api/houses/?id=${house.id}`,
+                              { method: "DELETE" }
+                            );
 
-                              if (!response.ok)
-                                throw new Error("Nepodařilo se smazat dům");
+                            if (!response.ok)
+                              throw new Error("Nepodařilo se smazat dům");
 
-                              fetchHouses(); // Aktualizujeme seznam
-                            } catch (err) {
-                              console.error(err);
-                              alert("Nepodařilo se smazat dům");
-                            }
+                            fetchHouses();
+                          } catch (err) {
+                            console.error(err);
+                            alert("Nepodařilo se smazat dům");
                           }
-                        }}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
+                        }
+                      }}
+                    >
+                      <Trash2 className="h-4 w-4" />
+                    </Button>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">
@@ -123,6 +111,15 @@ export default function Page() {
                       </p>
                     </div>
                   </CardContent>
+                  <div className="p-6 pt-0 flex justify-end">
+                    <Button
+                      variant="default"
+                      className="bg-gray-900 hover:bg-gray-700"
+                      onClick={() => router.push(`/houses/${house.id}`)}
+                    >
+                      Detail domu
+                    </Button>
+                  </div>
                 </Card>
               ))}
             </div>

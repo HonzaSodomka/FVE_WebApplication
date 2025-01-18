@@ -17,20 +17,23 @@ interface House {
 }
 
 interface HouseDialogProps {
-  house?: House;  // nepovinné - pokud není, jde o přidání nového
+  house?: House;
   onSuccess: () => void;
 }
 
 export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
+  
   const [formData, setFormData] = useState({
     name: '',
     solar_power: '',
     battery_capacity: ''
   });
+  
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Effect pro předvyplnění formuláře při editaci existujícího domu
   useEffect(() => {
     if (house) {
       setFormData({
@@ -47,6 +50,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
     setIsLoading(true);
 
     try {
+      // Nastavení URL a metody podle toho, zda jde o vytvoření nebo úpravu
       let url = `${API_URL}/api/houses/`;
       let method = 'POST';
 
@@ -55,6 +59,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
         method = 'PATCH';
       }
 
+      // Volání API pro uložení dat
       const response = await fetch(url, {
         method,
         headers: {
@@ -71,7 +76,8 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
 
       onSuccess();
       setIsOpen(false);
-      if (!house) {  // Jen při vytváření nového resetujeme formulář
+      // Reset formuláře pouze při vytváření nového domu
+      if (!house) {
         setFormData({
           name: '',
           solar_power: '',
@@ -89,6 +95,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
+        {/* Podmíněné renderování tlačítka podle režimu (úprava/vytvoření) */}
         {house ? (
           <Button
             variant="ghost"
@@ -104,12 +111,14 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
           </Button>
         )}
       </DialogTrigger>
+      
       <DialogContent>
         <DialogHeader>
           <DialogTitle>
             {house ? 'Upravit dům' : 'Přidat nový dům'}
           </DialogTitle>
         </DialogHeader>
+        
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
             <Alert variant="destructive">
@@ -128,7 +137,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                 required
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Výkon solárních panelů (kWp)
@@ -143,7 +152,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                 required
               />
             </div>
-            
+
             <div>
               <label className="block text-sm font-medium mb-1">
                 Kapacita baterie (kWh)

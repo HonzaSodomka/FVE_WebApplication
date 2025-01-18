@@ -115,6 +115,7 @@ def get_solar_prediction(request):
 @csrf_exempt
 @require_http_methods(["GET", "POST", "DELETE", "PATCH"])
 def houses(request):
+    # Vrací list domů z db
     if request.method == "GET":
         try:
             houses_list = list(House.objects.values())
@@ -123,7 +124,8 @@ def houses(request):
         except Exception as e:
             logger.error(f"Error fetching houses: {str(e)}")
             return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
-        
+
+    # Vytváří dům v db   
     elif request.method == "POST":
         try:
             data = json.loads(request.body)
@@ -146,7 +148,8 @@ def houses(request):
         except Exception as e:
             logger.error(f"Error creating house: {str(e)}")
             return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
-            
+
+    # Maže dům z db        
     elif request.method == "DELETE":
         try:
             house_id = request.GET.get('id')
@@ -164,7 +167,8 @@ def houses(request):
         except Exception as e:
             logger.error(f"Error deleting house: {str(e)}")
             return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
-            
+
+    # Aktualizuje dům již existující v db        
     elif request.method == "PATCH":
         try:
             house_id = request.GET.get('id')

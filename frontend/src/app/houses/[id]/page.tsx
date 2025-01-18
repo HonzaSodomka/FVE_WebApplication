@@ -1,12 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft, Plus } from 'lucide-react';
-import Link from 'next/link';
-import { useParams } from 'next/navigation';
-import HouseDialog from '@/app/components/HouseDialog';
+import React, { useState, useEffect, useCallback } from "react";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Plus } from "lucide-react";
+import Link from "next/link";
+import { useParams } from "next/navigation";
+import HouseDialog from "@/app/components/HouseDialog";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -23,32 +23,32 @@ export default function Page() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchData = async () => {
+  const fetchData = useCallback(async () => {
     try {
       const response = await fetch(`${API_URL}/api/houses/`);
       const data = await response.json();
       const currentHouse = data.houses.find(
         (h: House) => h.id === parseInt(params.id as string)
       );
-      
+
       if (!currentHouse) {
-        throw new Error('Dům nenalezen');
+        throw new Error("Dům nenalezen");
       }
-      
+
       setHouse(currentHouse);
     } catch (err) {
-      setError('Nepodařilo se načíst data');
+      setError("Nepodařilo se načíst data");
       console.error(err);
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [params.id]);
 
   useEffect(() => {
     if (params.id) {
       fetchData();
     }
-  }, [params.id]);
+  }, [params.id, fetchData]);
 
   if (isLoading) return <div className="text-center p-4">Načítání...</div>;
   if (error || !house) return <div className="text-red-500 p-4">{error}</div>;

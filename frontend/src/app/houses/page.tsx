@@ -1,11 +1,12 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
-import { Button } from '@/components/ui/button';
-import { ArrowLeft } from 'lucide-react';
-import { Card, CardHeader, CardContent, CardTitle } from '@/components/ui/card';
-import HouseDialog from '@/app/components/HouseDialog';
+import React, { useState, useEffect } from "react";
+import Link from "next/link";
+import { Button } from "@/components/ui/button";
+import { ArrowLeft, Trash2 } from "lucide-react";
+import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
+import HouseDialog from "@/app/components/HouseDialog";
+import { useRouter } from "next/navigation";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -17,6 +18,7 @@ interface House {
 }
 
 export default function Page() {
+  const router = useRouter();
   const [houses, setHouses] = useState<House[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -24,15 +26,19 @@ export default function Page() {
   const fetchHouses = async () => {
     try {
       const response = await fetch(`${API_URL}/api/houses/`);
-      if (!response.ok) throw new Error('Nepodařilo se načíst data');
+      if (!response.ok) throw new Error("Nepodařilo se načíst data");
       const data = await response.json();
       setHouses(data.houses);
     } catch (err) {
-      setError('Nepodařilo se načíst domy');
+      setError("Nepodařilo se načíst domy");
       console.error(err);
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleHouseClick = (houseId: number) => {
+    router.push(`/houses/${houseId}`);
   };
 
   useEffect(() => {
@@ -58,13 +64,9 @@ export default function Page() {
 
         <section className="bg-white rounded-lg shadow-lg p-6">
           {isLoading ? (
-            <div className="text-center text-gray-500 py-8">
-              Načítání...
-            </div>
+            <div className="text-center text-gray-500 py-8">Načítání...</div>
           ) : error ? (
-            <div className="text-center text-red-500 py-8">
-              {error}
-            </div>
+            <div className="text-center text-red-500 py-8">{error}</div>
           ) : houses.length === 0 ? (
             <div className="text-center text-gray-500 py-8">
               Zatím nejsou přidány žádné domy
@@ -72,12 +74,44 @@ export default function Page() {
           ) : (
             <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
               {houses.map((house) => (
-                <Card 
-                  key={house.id} 
+                <Card
+                  key={house.id}
                   className="hover:shadow-lg transition-shadow cursor-pointer"
+                  onClick={() => handleHouseClick(house.id)}
                 >
-                  <CardHeader>
+                  <CardHeader className="flex flex-row items-center justify-between space-y-0">
                     <CardTitle>{house.name}</CardTitle>
+                    <div className="flex gap-2">
+                      <HouseDialog house={house} onSuccess={fetchHouses} />
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                        onClick={async (e) => {
+                          e.stopPropagation();
+                          if (
+                            window.confirm("Opravdu chcete smazat tento dům?")
+                          ) {
+                            try {
+                              const response = await fetch(
+                                `${API_URL}/api/houses/?id=${house.id}`,
+                                { method: "DELETE" }
+                              );
+
+                              if (!response.ok)
+                                throw new Error("Nepodařilo se smazat dům");
+
+                              fetchHouses(); // Aktualizujeme seznam
+                            } catch (err) {
+                              console.error(err);
+                              alert("Nepodařilo se smazat dům");
+                            }
+                          }
+                        }}
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
                   </CardHeader>
                   <CardContent>
                     <div className="space-y-2">

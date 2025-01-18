@@ -118,6 +118,7 @@ def houses(request):
     if request.method == "GET":
         try:
             houses_list = list(House.objects.values())
+            logger.info(f"Successfully returned {len(houses_list)} houses")
             return JsonResponse({'houses': houses_list})
         except Exception as e:
             logger.error(f"Error fetching houses: {str(e)}")
@@ -126,11 +127,13 @@ def houses(request):
     elif request.method == "POST":
         try:
             data = json.loads(request.body)
+            logger.info(f"Received request to create house: {data}")
             house = House.objects.create(
                 name=data['name'],
                 solar_power=data['solar_power'],
                 battery_capacity=data['battery_capacity']
             )
+            logger.info(f"Successfully created house with ID {house.id}")
             return JsonResponse({
                 'id': house.id,
                 'name': house.name,
@@ -138,6 +141,7 @@ def houses(request):
                 'battery_capacity': house.battery_capacity
             }, status=201)
         except KeyError as e:
+            logger.error(f"Missing field in house creation request: {str(e)}")
             return JsonResponse({'error': f'Chybějící pole: {str(e)}'}, status=400)
         except Exception as e:
             logger.error(f"Error creating house: {str(e)}")
@@ -147,12 +151,15 @@ def houses(request):
         try:
             house_id = request.GET.get('id')
             if not house_id:
+                logger.warning("Delete request missing house ID")
                 return JsonResponse({'error': 'Chybí ID domu'}, status=400)
                 
             house = House.objects.get(id=house_id)
             house.delete()
+            logger.info(f"Successfully deleted house with ID {house_id}")
             return JsonResponse({'message': 'Dům byl odstraněn'}, status=200)
         except House.DoesNotExist:
+            logger.warning(f"Attempted to delete non-existent house with ID {house_id}")
             return JsonResponse({'error': 'Dům nenalezen'}, status=404)
         except Exception as e:
             logger.error(f"Error deleting house: {str(e)}")
@@ -162,10 +169,12 @@ def houses(request):
         try:
             house_id = request.GET.get('id')
             if not house_id:
+                logger.warning("Update request missing house ID")
                 return JsonResponse({'error': 'Chybí ID domu'}, status=400)
                 
             house = House.objects.get(id=house_id)
             data = json.loads(request.body)
+            logger.info(f"Received request to update house {house_id}: {data}")
             
             if 'name' in data:
                 house.name = data['name']
@@ -175,6 +184,7 @@ def houses(request):
                 house.battery_capacity = data['battery_capacity']
             
             house.save()
+            logger.info(f"Successfully updated house {house_id}")
             
             return JsonResponse({
                 'id': house.id,
@@ -184,6 +194,7 @@ def houses(request):
             })
             
         except House.DoesNotExist:
+            logger.warning(f"Attempted to update non-existent house with ID {house_id}")
             return JsonResponse({'error': 'Dům nenalezen'}, status=404)
         except Exception as e:
             logger.error(f"Error updating house: {str(e)}")

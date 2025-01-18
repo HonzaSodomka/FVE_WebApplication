@@ -1,19 +1,27 @@
 "use client";
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Plus } from 'lucide-react';
+import { Plus, Pencil } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+interface House {
+  id: number;
+  name: string;
+  solar_power: number;
+  battery_capacity: number;
+}
+
 interface HouseDialogProps {
+  house?: House;  // nepovinné - pokud není, jde o přidání nového
   onSuccess: () => void;
 }
 
-export default function HouseDialog({ onSuccess }: HouseDialogProps) {
+export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
@@ -23,14 +31,32 @@ export default function HouseDialog({ onSuccess }: HouseDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  useEffect(() => {
+    if (house) {
+      setFormData({
+        name: house.name,
+        solar_power: house.solar_power.toString(),
+        battery_capacity: house.battery_capacity.toString()
+      });
+    }
+  }, [house]);
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
     setIsLoading(true);
 
     try {
-      const response = await fetch(`${API_URL}/api/houses/`, {
-        method: 'POST',
+      let url = `${API_URL}/api/houses/`;
+      let method = 'POST';
+
+      if (house?.id) {
+        url += `?id=${house.id}`;
+        method = 'PATCH';
+      }
+
+      const response = await fetch(url, {
+        method,
         headers: {
           'Content-Type': 'application/json',
         },
@@ -41,13 +67,19 @@ export default function HouseDialog({ onSuccess }: HouseDialogProps) {
         }),
       });
 
-      if (!response.ok) throw new Error('Nepodařilo se vytvořit dům');
+      if (!response.ok) throw new Error('Nepodařilo se uložit dům');
 
       onSuccess();
       setIsOpen(false);
-      setFormData({ name: '', solar_power: '', battery_capacity: '' });
+      if (!house) {  // Jen při vytváření nového resetujeme formulář
+        setFormData({
+          name: '',
+          solar_power: '',
+          battery_capacity: ''
+        });
+      }
     } catch (err) {
-      setError('Nepodařilo se vytvořit dům');
+      setError('Nepodařilo se uložit dům');
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -57,14 +89,26 @@ export default function HouseDialog({ onSuccess }: HouseDialogProps) {
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
-        <Button className="flex items-center gap-2">
-          <Plus className="h-4 w-4" />
-          Přidat dům
-        </Button>
+        {house ? (
+          <Button
+            variant="ghost"
+            size="icon"
+            className="text-blue-500 hover:text-blue-700 hover:bg-blue-50"
+          >
+            <Pencil className="h-4 w-4" />
+          </Button>
+        ) : (
+          <Button className="flex items-center gap-2">
+            <Plus className="h-4 w-4" />
+            Přidat dům
+          </Button>
+        )}
       </DialogTrigger>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>Přidat nový dům</DialogTitle>
+          <DialogTitle>
+            {house ? 'Upravit dům' : 'Přidat nový dům'}
+          </DialogTitle>
         </DialogHeader>
         <form onSubmit={handleSubmit} className="space-y-4">
           {error && (
@@ -128,7 +172,7 @@ export default function HouseDialog({ onSuccess }: HouseDialogProps) {
               type="submit"
               disabled={isLoading}
             >
-              {isLoading ? "Vytvářím..." : "Vytvořit"}
+              {isLoading ? "Ukládám..." : house ? "Uložit" : "Přidat"}
             </Button>
           </div>
         </form>

@@ -23,8 +23,10 @@ interface Appliance {
   name: string;
   power_consumption: number;
   appliance_type: "CONSTANT" | "CYCLIC" | "SCHEDULED" | "ON_DEMAND";
-  run_duration?: number;
-  pause_duration?: number;
+  run_duration_min?: number;
+  run_duration_max?: number;
+  pause_duration_min?: number;
+  pause_duration_max?: number;
   usage_duration?: number;
   uses_per_window?: number;
   weekday_probability: number;

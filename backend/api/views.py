@@ -1,13 +1,38 @@
 from django.http import JsonResponse
-from .models import PriceData, SolarData, House, Appliance
+from .models import PriceData, SolarData, House, Appliance, DashboardPassword
 from datetime import datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
+from django.contrib.auth.hashers import check_password
 import logging
 import json
 
 
 logger = logging.getLogger('api')
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def verify_password(request):
+    try:
+        data = json.loads(request.body)
+        password = data.get('password')
+        
+        dashboard_password = DashboardPassword.objects.first()
+        if not dashboard_password:
+            return JsonResponse({
+                'error': 'Systémová chyba - heslo není nastaveno'
+            }, status=500)
+        
+        # Porovnání zahashovaného hesla
+        if check_password(password, dashboard_password.password_hash):
+            # Nastavení session
+            request.session['authenticated'] = True
+            return JsonResponse({'success': True})
+        else:
+            return JsonResponse({'error': 'Nesprávné heslo'}, status=401)
+            
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 def get_prices(request):
    date_str = request.GET.get('date')
@@ -238,8 +263,10 @@ def house_appliances(request, house_id):
             if data['appliance_type'] == 'CYCLIC':
                 appliance = Appliance.objects.create(
                     **appliance_data,
-                    run_duration=data['run_duration'],
-                    pause_duration=data['pause_duration']
+                    run_duration_min=data['run_duration_min'],
+                    run_duration_max=data['run_duration_max'],
+                    pause_duration_min=data['pause_duration_min'],
+                    pause_duration_max=data['pause_duration_max']
                 )
             elif data['appliance_type'] == 'SCHEDULED':
                 appliance = Appliance.objects.create(
@@ -275,8 +302,10 @@ def house_appliances(request, house_id):
                 'name': appliance.name,
                 'power_consumption': appliance.power_consumption,
                 'appliance_type': appliance.appliance_type,
-                'run_duration': appliance.run_duration,
-                'pause_duration': appliance.pause_duration,
+                'run_duration_min': appliance.run_duration_min,
+                'run_duration_max': appliance.run_duration_max,
+                'pause_duration_min': appliance.pause_duration_min,
+                'pause_duration_max': appliance.pause_duration_max,
                 'usage_duration': appliance.usage_duration,
                 'uses_per_window': appliance.uses_per_window,
                 'weekday_probability': appliance.weekday_probability,
@@ -332,10 +361,14 @@ def house_appliances(request, house_id):
 
             # Pole podle typu spotřebiče
             if appliance.appliance_type == 'CYCLIC':
-                if 'run_duration' in data:
-                    appliance.run_duration = data['run_duration']
-                if 'pause_duration' in data:
-                    appliance.pause_duration = data['pause_duration']
+                if 'run_duration_min' in data:
+                    appliance.run_duration_min = data['run_duration_min']
+                if 'run_duration_max' in data:
+                    appliance.run_duration_max = data['run_duration_max']
+                if 'pause_duration_min' in data:
+                    appliance.pause_duration_min = data['pause_duration_min']
+                if 'pause_duration_max' in data:
+                    appliance.pause_duration_max = data['pause_duration_max']
                     
             elif appliance.appliance_type in ['SCHEDULED', 'ON_DEMAND']:
                 if 'usage_duration' in data:
@@ -361,8 +394,10 @@ def house_appliances(request, house_id):
                 'name': appliance.name,
                 'power_consumption': appliance.power_consumption,
                 'appliance_type': appliance.appliance_type,
-                'run_duration': appliance.run_duration,
-                'pause_duration': appliance.pause_duration,
+                'run_duration_min': appliance.run_duration_min,
+                'run_duration_max': appliance.run_duration_max,
+                'pause_duration_min': appliance.pause_duration_min,
+                'pause_duration_max': appliance.pause_duration_max,
                 'usage_duration': appliance.usage_duration,
                 'uses_per_window': appliance.uses_per_window,
                 'weekday_probability': appliance.weekday_probability,

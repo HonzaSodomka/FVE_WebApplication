@@ -28,8 +28,10 @@ interface Appliance {
   name: string;
   power_consumption: number;
   appliance_type: "CONSTANT" | "CYCLIC" | "SCHEDULED" | "ON_DEMAND";
-  run_duration?: number;
-  pause_duration?: number;
+  run_duration_min?: number;
+  run_duration_max?: number;
+  pause_duration_min?: number;
+  pause_duration_max?: number;
   usage_duration?: number;
   uses_per_window?: number;
   weekday_probability: number;
@@ -54,8 +56,10 @@ export default function ApplianceDialog({
     name: "",
     power_consumption: "",
     appliance_type: "",
-    run_duration: "",
-    pause_duration: "",
+    run_duration_min: "",
+    run_duration_max: "",
+    pause_duration_min: "",
+    pause_duration_max: "",
     usage_duration: "",
     uses_per_window: "",
     weekday_probability: "1",
@@ -72,8 +76,22 @@ export default function ApplianceDialog({
         name: appliance.name,
         power_consumption: appliance.power_consumption.toString(),
         appliance_type: appliance.appliance_type,
-        run_duration: appliance.run_duration?.toString() || "",
-        pause_duration: appliance.pause_duration?.toString() || "",
+        run_duration_min:
+          appliance.run_duration_min != null
+            ? appliance.run_duration_min.toString()
+            : "",
+        run_duration_max:
+          appliance.run_duration_max != null
+            ? appliance.run_duration_max.toString()
+            : "",
+        pause_duration_min:
+          appliance.pause_duration_min != null
+            ? appliance.pause_duration_min.toString()
+            : "",
+        pause_duration_max:
+          appliance.pause_duration_max != null
+            ? appliance.pause_duration_max.toString()
+            : "",
         usage_duration: appliance.usage_duration?.toString() || "",
         uses_per_window: appliance.uses_per_window?.toString() || "",
         weekday_probability: appliance.weekday_probability.toString(),
@@ -90,6 +108,26 @@ export default function ApplianceDialog({
     setIsLoading(true);
 
     try {
+
+      if (formData.appliance_type === "CYCLIC") {
+        const runMin = parseInt(formData.run_duration_min);
+        const runMax = parseInt(formData.run_duration_max);
+        const pauseMin = parseInt(formData.pause_duration_min);
+        const pauseMax = parseInt(formData.pause_duration_max);
+  
+        if (runMin > runMax) {
+          setError("Maximální doba běhu musí být delší než minimální");
+          setIsLoading(false);
+          return;
+        }
+  
+        if (pauseMin > pauseMax) {
+          setError("Maximální doba pauzy musí být delší než minimální");
+          setIsLoading(false);
+          return;
+        }
+      }
+
       let url = `${API_URL}/api/houses/${houseId}/appliances/`;
       let method = "POST";
 
@@ -108,8 +146,10 @@ export default function ApplianceDialog({
           power_consumption: parseInt(formData.power_consumption),
           appliance_type: formData.appliance_type,
           ...(formData.appliance_type === "CYCLIC" && {
-            run_duration: parseInt(formData.run_duration),
-            pause_duration: parseInt(formData.pause_duration),
+            run_duration_min: parseInt(formData.run_duration_min),
+            run_duration_max: parseInt(formData.run_duration_max),
+            pause_duration_min: parseInt(formData.pause_duration_min),
+            pause_duration_max: parseInt(formData.pause_duration_max),
           }),
           ...(formData.appliance_type === "SCHEDULED" && {
             usage_duration: parseInt(formData.usage_duration),
@@ -138,8 +178,10 @@ export default function ApplianceDialog({
           name: "",
           power_consumption: "",
           appliance_type: "",
-          run_duration: "",
-          pause_duration: "",
+          run_duration_min: "",
+          run_duration_max: "",
+          pause_duration_min: "",
+          pause_duration_max: "",
           usage_duration: "",
           uses_per_window: "",
           weekday_probability: "1",
@@ -188,7 +230,6 @@ export default function ApplianceDialog({
             </Alert>
           )}
 
-          {/* Základní údaje pro všechny typy */}
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium mb-1">
@@ -257,35 +298,81 @@ export default function ApplianceDialog({
           {/* Pole pro CYCLIC typ */}
           {formData.appliance_type === "CYCLIC" && (
             <div className="space-y-4 border-t pt-4">
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Doba běhu cyklu (minuty)
-                </label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={formData.run_duration}
-                  onChange={(e) =>
-                    setFormData({ ...formData, run_duration: e.target.value })
-                  }
-                  placeholder="Např. 30"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Minimální doba běhu (minuty)
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={formData.run_duration_min}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        run_duration_min: e.target.value,
+                      })
+                    }
+                    placeholder="Např. 10"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Maximální doba běhu (minuty)
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={formData.run_duration_max}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        run_duration_max: e.target.value,
+                      })
+                    }
+                    placeholder="Např. 15"
+                    required
+                  />
+                </div>
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Doba pauzy cyklu (minuty)
-                </label>
-                <Input
-                  type="number"
-                  min="1"
-                  value={formData.pause_duration}
-                  onChange={(e) =>
-                    setFormData({ ...formData, pause_duration: e.target.value })
-                  }
-                  placeholder="Např. 60"
-                  required
-                />
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Minimální doba pauzy (minuty)
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={formData.pause_duration_min}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        pause_duration_min: e.target.value,
+                      })
+                    }
+                    placeholder="Např. 30"
+                    required
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium mb-1">
+                    Maximální doba pauzy (minuty)
+                  </label>
+                  <Input
+                    type="number"
+                    min="1"
+                    value={formData.pause_duration_max}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        pause_duration_max: e.target.value,
+                      })
+                    }
+                    placeholder="Např. 45"
+                    required
+                  />
+                </div>
               </div>
             </div>
           )}

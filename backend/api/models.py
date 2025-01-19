@@ -1,5 +1,17 @@
 from django.db import models
 
+#FVE.Bakalarka.2025
+class DashboardPassword(models.Model):
+    password_hash = models.CharField(max_length=128)
+    
+    def __str__(self):
+        return "Dashboard heslo"
+    
+    class Meta:
+        verbose_name = "Dashboard heslo"
+        verbose_name_plural = "Dashboard hesla"
+
+
 class PriceData(models.Model):
     date = models.DateField()
     hour = models.IntegerField()
@@ -69,17 +81,29 @@ class Appliance(models.Model):
     )
 
     # Pro CYCLIC typ
-    run_duration = models.IntegerField(
+    run_duration_min = models.IntegerField(
         null=True, 
         blank=True,
-        verbose_name="Doba běhu cyklu (minuty)",
-        help_text="Doba, po kterou spotřebič běží v jednom cyklu"
+        verbose_name="Minimální doba běhu cyklu (minuty)",
+        help_text="Minimální doba, po kterou spotřebič běží v jednom cyklu"
     )
-    pause_duration = models.IntegerField(
+    run_duration_max = models.IntegerField(
         null=True, 
         blank=True,
-        verbose_name="Doba pauzy cyklu (minuty)",
-        help_text="Doba mezi cykly běhu"
+        verbose_name="Maximální doba běhu cyklu (minuty)",
+        help_text="Maximální doba, po kterou spotřebič běží v jednom cyklu"
+    )
+    pause_duration_min = models.IntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="Minimální doba pauzy mezi cykly (minuty)",
+        help_text="Minimální doba mezi cykly běhu"
+    )
+    pause_duration_max = models.IntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="Maximální doba pauzy mezi cykly (minuty)",
+        help_text="Maximální doba mezi cykly běhu"
     )
 
     # Pro SCHEDULED a ON_DEMAND typy
@@ -126,8 +150,10 @@ class Appliance(models.Model):
         # Nastavení defaultních hodnot podle typu spotřebiče
         if self.appliance_type == 'CONSTANT':
             # Konstantní spotřebiče běží pořád stejně
-            self.run_duration = None
-            self.pause_duration = None
+            self.run_duration_min = None
+            self.run_duration_max = None
+            self.pause_duration_min = None
+            self.pause_duration_max = None
             self.usage_duration = None
             self.uses_per_window = None
             self.weekday_probability = 1.0
@@ -146,15 +172,19 @@ class Appliance(models.Model):
             
         elif self.appliance_type == 'SCHEDULED':
             # Plánované spotřebiče mají definovanou délku běhu a časová okna
-            self.run_duration = None
-            self.pause_duration = None
+            self.run_duration_min = None
+            self.run_duration_max = None
+            self.pause_duration_min = None
+            self.pause_duration_max = None
             self.uses_per_window = None
             
         elif self.appliance_type == 'ON_DEMAND':
             # Spotřebiče na vyžádání mají definovanou délku použití, 
             # počet použití v okně a časová okna
-            self.run_duration = None
-            self.pause_duration = None
+            self.run_duration_min = None
+            self.run_duration_max = None
+            self.pause_duration_min = None
+            self.pause_duration_max = None
 
         super().save(*args, **kwargs)
 

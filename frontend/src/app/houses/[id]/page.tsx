@@ -3,10 +3,11 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Plus } from "lucide-react";
+import { ArrowLeft, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import HouseDialog from "@/app/components/HouseDialog";
+import ApplianceDialog from "@/app/components/ApplianceDialog";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -17,17 +18,34 @@ interface House {
   battery_capacity: number;
 }
 
+interface Appliance {
+  id: number;
+  name: string;
+  power_consumption: number;
+  appliance_type: "CONSTANT" | "CYCLIC" | "SCHEDULED" | "ON_DEMAND";
+  run_duration?: number;
+  pause_duration?: number;
+  usage_duration?: number;
+  uses_per_window?: number;
+  weekday_probability: number;
+  weekend_probability: number;
+  weekday_hours: number[][];
+  weekend_hours: number[][];
+}
+
 export default function Page() {
   const params = useParams();
   const [house, setHouse] = useState<House | null>(null);
+  const [appliances, setAppliances] = useState<Appliance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {
-      const response = await fetch(`${API_URL}/api/houses/`);
-      const data = await response.json();
-      const currentHouse = data.houses.find(
+      // Načtení domu
+      const houseResponse = await fetch(`${API_URL}/api/houses/`);
+      const houseData = await houseResponse.json();
+      const currentHouse = houseData.houses.find(
         (h: House) => h.id === parseInt(params.id as string)
       );
 
@@ -36,6 +54,13 @@ export default function Page() {
       }
 
       setHouse(currentHouse);
+
+      // Načtení spotřebičů
+      const appliancesResponse = await fetch(
+        `${API_URL}/api/houses/${params.id}/appliances/`
+      );
+      const appliancesData = await appliancesResponse.json();
+      setAppliances(appliancesData.appliances);
     } catch (err) {
       setError("Nepodařilo se načíst data");
       console.error(err);
@@ -43,6 +68,24 @@ export default function Page() {
       setIsLoading(false);
     }
   }, [params.id]);
+
+  const handleDeleteAppliance = async (applianceId: number) => {
+    if (window.confirm("Opravdu chcete smazat tento spotřebič?")) {
+      try {
+        const response = await fetch(
+          `${API_URL}/api/houses/${params.id}/appliances/?id=${applianceId}`,
+          { method: "DELETE" }
+        );
+
+        if (!response.ok) throw new Error("Nepodařilo se smazat spotřebič");
+
+        fetchData();
+      } catch (err) {
+        console.error(err);
+        alert("Nepodařilo se smazat spotřebič");
+      }
+    }
+  };
 
   useEffect(() => {
     if (params.id) {
@@ -56,7 +99,6 @@ export default function Page() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header s navigací a tlačítkem pro přidání */}
         <div className="flex justify-between items-center mb-6">
           <div className="flex items-center gap-4">
             <Link href="/houses">
@@ -66,15 +108,13 @@ export default function Page() {
             </Link>
             <h1 className="text-2xl font-bold">{house.name}</h1>
           </div>
-          <Button>
-            <Plus className="h-4 w-4 mr-2" />
-            Přidat spotřebič
-          </Button>
+          <ApplianceDialog 
+            houseId={parseInt(params.id as string)}
+            onSuccess={fetchData} 
+          />
         </div>
 
-        {/* Grid s informacemi o domě a spotřebiči */}
         <div className="grid gap-6 md:grid-cols-2">
-          {/* Karta s informacemi o domě */}
           <Card>
             <CardHeader className="flex flex-row items-center justify-between space-y-0">
               <CardTitle>Parametry domu</CardTitle>
@@ -92,15 +132,52 @@ export default function Page() {
             </CardContent>
           </Card>
 
-          {/* Karta se spotřebiči */}
           <Card>
             <CardHeader>
               <CardTitle>Spotřebiče</CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-center text-gray-500 py-8">
-                Zatím nejsou přidány žádné spotřebiče
-              </div>
+              {appliances.length === 0 ? (
+                <div className="text-center text-gray-500 py-8">
+                  Zatím nejsou přidány žádné spotřebiče
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {appliances.map((appliance) => (
+                    <div
+                      key={appliance.id}
+                      className="p-4 border rounded-lg hover:bg-gray-50"
+                    >
+                      <div className="flex justify-between items-start">
+                        <div>
+                          <h3 className="font-medium">{appliance.name}</h3>
+                          <p className="text-sm text-gray-600">
+                            Spotřeba: {appliance.power_consumption} W
+                          </p>
+                          <p className="text-sm text-gray-600">
+                            Typ: {appliance.appliance_type}
+                          </p>
+                        </div>
+                        <div className="flex gap-2">
+                          <ApplianceDialog
+                            houseId={parseInt(params.id as string)}
+                            appliance={appliance}
+                            onSuccess={fetchData}
+                          />
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="text-red-500 hover:text-red-700 hover:bg-red-50"
+                            onClick={() => handleDeleteAppliance(appliance.id)}
+                          >
+                            <Trash2 className="h-4 w-4" />
+                          </Button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </CardContent>
           </Card>
         </div>

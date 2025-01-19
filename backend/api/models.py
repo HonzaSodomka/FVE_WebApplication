@@ -1,17 +1,5 @@
 from django.db import models
 
-#FVE.Bakalarka.2025
-class DashboardPassword(models.Model):
-    password_hash = models.CharField(max_length=128)
-    
-    def __str__(self):
-        return "Dashboard heslo"
-    
-    class Meta:
-        verbose_name = "Dashboard heslo"
-        verbose_name_plural = "Dashboard hesla"
-
-
 class PriceData(models.Model):
     date = models.DateField()
     hour = models.IntegerField()

@@ -1,19 +1,45 @@
-'use client';
+"use client";
 
-import { useEffect } from 'react';
-import { useRouter } from 'next/navigation';
+import { useState } from "react";
+import { DatePicker } from "@/components/ui/date-picker";
+import { Button } from "@/components/ui/button";
+import Link from "next/link";
+import PriceChart from "./components/PriceChart";
+import SolarDataChart from "./components/SolarDataChart";
 
 export default function Home() {
-  const router = useRouter();
+  //Nastavení data - výchozí je dnešek
+  const [date, setDate] = useState<Date>(() => new Date());
 
-  useEffect(() => {
-    const isAuthenticated = localStorage.getItem('is_authenticated') === 'true';
-    if (isAuthenticated) {
-      router.push('/dashboard');
-    } else {
-      router.push('/login');
-    }
-  }, [router]);
+  return (
+    <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 p-8">
+      <div className="max-w-7xl mx-auto">
+        <header className="mb-8 bg-white p-6 rounded-lg shadow-lg">
+          <div className="flex justify-between items-center mb-4">
+            <h1 className="text-3xl font-bold text-gray-800">
+              Energetický Dashboard
+            </h1>
+            <Button asChild>
+              <Link href="/houses">Správa domů</Link>
+            </Button>
+          </div>
+          <div className="flex justify-between items-center">
+            <p className="text-lg text-gray-600">
+              Přehled cen elektřiny a solární produkce
+            </p>
+            <DatePicker date={date} onSelect={setDate} />
+          </div>
+        </header>
 
-  return null;
+        <div className="space-y-8">
+          <section className="bg-white rounded-lg shadow-lg p-6 transition-all duration-300 ease-in-out transform hover:-translate-y-1 hover:shadow-xl">
+            <PriceChart date={date} />
+          </section>
+          <section className="bg-white rounded-lg shadow-lg p-6 transition-all duration-300 ease-in-out transform hover:-translate-y-1 hover:shadow-xl">
+            <SolarDataChart date={date} />
+          </section>
+        </div>
+      </div>
+    </main>
+  );
 }

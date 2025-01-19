@@ -1,38 +1,13 @@
 from django.http import JsonResponse
-from .models import PriceData, SolarData, House, Appliance, DashboardPassword
+from .models import PriceData, SolarData, House, Appliance
 from datetime import datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.contrib.auth.hashers import check_password
 import logging
 import json
 
 
 logger = logging.getLogger('api')
-
-@csrf_exempt
-@require_http_methods(["POST"])
-def verify_password(request):
-    try:
-        data = json.loads(request.body)
-        password = data.get('password')
-        
-        dashboard_password = DashboardPassword.objects.first()
-        if not dashboard_password:
-            return JsonResponse({
-                'error': 'Systémová chyba - heslo není nastaveno'
-            }, status=500)
-        
-        # Porovnání zahashovaného hesla
-        if check_password(password, dashboard_password.password_hash):
-            # Nastavení session
-            request.session['authenticated'] = True
-            return JsonResponse({'success': True})
-        else:
-            return JsonResponse({'error': 'Nesprávné heslo'}, status=401)
-            
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=500)
 
 def get_prices(request):
    date_str = request.GET.get('date')

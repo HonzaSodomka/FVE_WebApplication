@@ -6,6 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
+import Cookies from 'js-cookie';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -33,8 +34,9 @@ export default function LoginPage() {
         throw new Error('Nesprávné heslo');
       }
 
-      // Nastavíme že jsme přihlášení do lokálního úložiště
+      // Nastavíme autentikaci do localStorage i cookies
       localStorage.setItem('is_authenticated', 'true');
+      Cookies.set('is_authenticated', 'true', { expires: 1 }); // vyprší za 1 den
       
       // Přesměrujeme na hlavní stránku
       router.push('/dashboard');

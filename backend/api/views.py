@@ -246,21 +246,18 @@ def house_appliances(request, house_id):
             elif data['appliance_type'] == 'SCHEDULED':
                 appliance = Appliance.objects.create(
                     **appliance_data,
-                    usage_duration=data['usage_duration'],
-                    weekday_probability=data.get('weekday_probability', 1.0),
-                    weekend_probability=data.get('weekend_probability', 1.0),
-                    weekday_hours=data.get('weekday_hours', [[0, 24]]),
-                    weekend_hours=data.get('weekend_hours', [[0, 24]])
+                    usage_duration_min=data['usage_duration_min'],
+                    usage_duration_max=data['usage_duration_max'],
+                    weekday_hours=data.get('weekday_hours', []),
+                    weekend_hours=data.get('weekend_hours', []),
                 )
             elif data['appliance_type'] == 'ON_DEMAND':
                 appliance = Appliance.objects.create(
                     **appliance_data,
-                    usage_duration=data['usage_duration'],
-                    weekday_probability=data.get('weekday_probability', 1.0),
-                    weekend_probability=data.get('weekend_probability', 1.0),
-                    weekday_hours=data.get('weekday_hours', [[0, 24]]),
-                    weekend_hours=data.get('weekend_hours', [[0, 24]]),
-                    uses_per_window=data['uses_per_window']
+                    usage_duration_min=data['usage_duration_min'],
+                    usage_duration_max=data['usage_duration_max'],
+                    weekday_hours=data.get('weekday_hours', []),
+                    weekend_hours=data.get('weekend_hours', [])
                 )
             elif data['appliance_type'] == 'CONSTANT':
                 appliance = Appliance.objects.create(**appliance_data)
@@ -281,13 +278,11 @@ def house_appliances(request, house_id):
                 'run_duration_max': appliance.run_duration_max,
                 'pause_duration_min': appliance.pause_duration_min,
                 'pause_duration_max': appliance.pause_duration_max,
-                'usage_duration': appliance.usage_duration,
-                'uses_per_window': appliance.uses_per_window,
-                'weekday_probability': appliance.weekday_probability,
-                'weekend_probability': appliance.weekend_probability,
+                'usage_duration_min': appliance.usage_duration_min,
+                'usage_duration_max': appliance.usage_duration_max,
                 'weekday_hours': appliance.weekday_hours,
                 'weekend_hours': appliance.weekend_hours
-            }, status=201)
+            })
             
         except KeyError as e:
             logger.error(f"Missing field in appliance creation request: {str(e)}")
@@ -346,20 +341,15 @@ def house_appliances(request, house_id):
                     appliance.pause_duration_max = data['pause_duration_max']
                     
             elif appliance.appliance_type in ['SCHEDULED', 'ON_DEMAND']:
-                if 'usage_duration' in data:
-                    appliance.usage_duration = data['usage_duration']
-                if 'weekday_probability' in data:
-                    appliance.weekday_probability = data['weekday_probability']
-                if 'weekend_probability' in data:
-                    appliance.weekend_probability = data['weekend_probability']
+                if 'usage_duration_min' in data:
+                    appliance.usage_duration_min = data['usage_duration_min']
+                if 'usage_duration_max' in data:
+                    appliance.usage_duration_max = data['usage_duration_max']
                 if 'weekday_hours' in data:
                     appliance.weekday_hours = data['weekday_hours']
                 if 'weekend_hours' in data:
                     appliance.weekend_hours = data['weekend_hours']
                     
-                if appliance.appliance_type == 'ON_DEMAND':
-                    if 'uses_per_window' in data:
-                        appliance.uses_per_window = data['uses_per_window']
             
             appliance.save()
             logger.info(f"Successfully updated appliance {appliance_id}")
@@ -373,10 +363,8 @@ def house_appliances(request, house_id):
                 'run_duration_max': appliance.run_duration_max,
                 'pause_duration_min': appliance.pause_duration_min,
                 'pause_duration_max': appliance.pause_duration_max,
-                'usage_duration': appliance.usage_duration,
-                'uses_per_window': appliance.uses_per_window,
-                'weekday_probability': appliance.weekday_probability,
-                'weekend_probability': appliance.weekend_probability,
+                'usage_duration_min': appliance.usage_duration_min,
+                'usage_duration_max': appliance.usage_duration_max,
                 'weekday_hours': appliance.weekday_hours,
                 'weekend_hours': appliance.weekend_hours
             })

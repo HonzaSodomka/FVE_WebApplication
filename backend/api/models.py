@@ -95,80 +95,55 @@ class Appliance(models.Model):
     )
 
     # Pro SCHEDULED a ON_DEMAND typy
-    usage_duration = models.IntegerField(
+    usage_duration_min = models.IntegerField(
         null=True, 
         blank=True,
-        verbose_name="Délka použití (minuty)",
-        help_text="Jak dlouho spotřebič běží při jednom použití"
+        verbose_name="Minimální doba běhu (minuty)",
     )
-
-    # Pro ON_DEMAND typ
-    uses_per_window = models.IntegerField(
-        null=True,
+    usage_duration_max = models.IntegerField(
+        null=True, 
         blank=True,
-        verbose_name="Počet použití v časovém okně",
-        help_text="Kolikrát se spotřebič typicky použije v jednom časovém okně"
+        verbose_name="Maximální doba běhu (minuty)",
     )
 
-    # Pro SCHEDULED a ON_DEMAND typy
-    weekday_probability = models.FloatField(
-        default=1.0,
-        verbose_name="Pravděpodobnost použití (pracovní den)",
-        help_text="Pravděpodobnost spuštění v časovém okně (pro plánované spotřebiče)"
-    )
-    weekend_probability = models.FloatField(
-        default=1.0,
-        verbose_name="Pravděpodobnost použití (víkend)",
-        help_text="Pravděpodobnost spuštění v časovém okně (pro plánované spotřebiče)"
-    )
-    
-    # Pro SCHEDULED a ON_DEMAND typy - časová okna kdy může běžet
+    # Pro SCHEDULED a ON_DEMAND typy - časová okna kdy může běžet + pravděpodobnosti
     weekday_hours = models.JSONField(
         default=list,
         verbose_name="Časová okna (pracovní den)",
-        help_text="Seznam časových oken ve formátu [[od1, do1], [od2, do2], ...], kde časy jsou v hodinách (0-24)"
+        help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int}]"  # přidáno uses
     )
     weekend_hours = models.JSONField(
         default=list,
         verbose_name="Časová okna (víkend)",
-        help_text="Seznam časových oken ve formátu [[od1, do1], [od2, do2], ...], kde časy jsou v hodinách (0-24)"
+        help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int}]"  # přidáno uses
     )
 
     def save(self, *args, **kwargs):
+        
         # Nastavení defaultních hodnot podle typu spotřebiče
         if self.appliance_type == 'CONSTANT':
-            # Konstantní spotřebiče běží pořád stejně
             self.run_duration_min = None
             self.run_duration_max = None
             self.pause_duration_min = None
             self.pause_duration_max = None
-            self.usage_duration = None
-            self.uses_per_window = None
-            self.weekday_probability = 1.0
-            self.weekend_probability = 1.0
-            self.weekday_hours = [[0, 24]]
-            self.weekend_hours = [[0, 24]]
+            self.usage_duration_min = None
+            self.usage_duration_max = None
+            self.weekday_hours = []
+            self.weekend_hours = []
             
         elif self.appliance_type == 'CYCLIC':
-            # Cyklické spotřebiče mají definované cykly, ale běží pořád
-            self.usage_duration = None
-            self.uses_per_window = None
-            self.weekday_probability = 1.0
-            self.weekend_probability = 1.0
-            self.weekday_hours = [[0, 24]]
-            self.weekend_hours = [[0, 24]]
+            self.usage_duration_min = None
+            self.usage_duration_max = None
+            self.weekday_hours = []
+            self.weekend_hours = []
             
         elif self.appliance_type == 'SCHEDULED':
-            # Plánované spotřebiče mají definovanou délku běhu a časová okna
             self.run_duration_min = None
             self.run_duration_max = None
             self.pause_duration_min = None
             self.pause_duration_max = None
-            self.uses_per_window = None
             
         elif self.appliance_type == 'ON_DEMAND':
-            # Spotřebiče na vyžádání mají definovanou délku použití, 
-            # počet použití v okně a časová okna
             self.run_duration_min = None
             self.run_duration_max = None
             self.pause_duration_min = None

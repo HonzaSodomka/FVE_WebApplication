@@ -64,7 +64,10 @@ export default function PriceChart({ date }: { date: Date }) {
         //Naformátuje datum a zeptá se api jestli existuje záznam pro něj
         const formattedDate = format(date, "yyyy-MM-dd");
         const response = await fetch(
-          `${API_URL}/api/prices/?date=${formattedDate}`
+          `${API_URL}/api/prices/?date=${formattedDate}`,
+          {
+            credentials: "include"
+          }
         );
         
         const data = await response.json();

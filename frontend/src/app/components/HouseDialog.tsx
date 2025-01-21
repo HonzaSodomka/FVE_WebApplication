@@ -62,6 +62,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
       // Volání API pro uložení dat
       const response = await fetch(url, {
         method,
+        credentials: "include", 
         headers: {
           'Content-Type': 'application/json',
         },

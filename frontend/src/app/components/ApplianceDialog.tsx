@@ -145,6 +145,7 @@ export default function ApplianceDialog({
 
      const response = await fetch(url, {
        method,
+       credentials: "include", 
        headers: {
          "Content-Type": "application/json",
        },

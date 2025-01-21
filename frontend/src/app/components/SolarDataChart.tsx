@@ -41,7 +41,10 @@ export default function SolarDataChart({ date }: { date: Date }) {
       try {
         const formattedDate = format(date, "yyyy-MM-dd");
         const response = await fetch(
-          `${API_URL}/api/solar_prediction/?date=${formattedDate}`
+          `${API_URL}/api/solar_prediction/?date=${formattedDate}`,
+          {
+            credentials: "include"
+          }
         );
         const data = await response.json();
 

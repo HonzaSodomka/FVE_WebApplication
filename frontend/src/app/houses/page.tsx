@@ -25,7 +25,9 @@ export default function Page() {
 
   const fetchHouses = async () => {
     try {
-      const response = await fetch(`${API_URL}/api/houses/`);
+      const response = await fetch(`${API_URL}/api/houses/`, {
+        credentials: "include",
+      });
       if (!response.ok) throw new Error("Nepodařilo se načíst data");
       const data = await response.json();
       setHouses(data.houses);
@@ -84,7 +86,10 @@ export default function Page() {
                           try {
                             const response = await fetch(
                               `${API_URL}/api/houses/?id=${house.id}`,
-                              { method: "DELETE" }
+                              { 
+                                method: "DELETE",
+                                credentials: "include"
+                              }
                             );
 
                             if (!response.ok)

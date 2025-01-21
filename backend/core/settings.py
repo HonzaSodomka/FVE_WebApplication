@@ -52,12 +52,20 @@ MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
+    'api.auth.SimpleAuthMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+# Session nastavení
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+SESSION_COOKIE_AGE = 86400  # 24 hodin
+SESSION_COOKIE_SECURE = True  # Jen pro HTTPS
+SESSION_COOKIE_SAMESITE = 'Lax'  # Bezpečnostní nastavení pro cookies
+SESSION_EXPIRE_AT_BROWSER_CLOSE = True
 
 #Kde hledat hlavní url config
 ROOT_URLCONF = 'core.urls'
@@ -144,6 +152,7 @@ CORS_ALLOWED_ORIGINS = [
     "http://bijec.nti.tul.cz:3000",
     "http://bijec.nti.tul.cz"
 ]
+CORS_ALLOW_CREDENTIALS = True 
 
 #Nastavení logování
 LOGGING = {

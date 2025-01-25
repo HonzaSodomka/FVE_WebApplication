@@ -248,16 +248,16 @@ def house_appliances(request, house_id):
                     **appliance_data,
                     usage_duration_min=data['usage_duration_min'],
                     usage_duration_max=data['usage_duration_max'],
-                    weekday_hours=data.get('weekday_hours', []),
-                    weekend_hours=data.get('weekend_hours', []),
+                    weekday_hours=data.get('weekday_hours', None),
+                    weekend_hours=data.get('weekend_hours', None),
                 )
             elif data['appliance_type'] == 'ON_DEMAND':
                 appliance = Appliance.objects.create(
                     **appliance_data,
                     usage_duration_min=data['usage_duration_min'],
                     usage_duration_max=data['usage_duration_max'],
-                    weekday_hours=data.get('weekday_hours', []),
-                    weekend_hours=data.get('weekend_hours', [])
+                    weekday_hours=data.get('weekday_hours', None),
+                    weekend_hours=data.get('weekend_hours', None),
                 )
             elif data['appliance_type'] == 'CONSTANT':
                 appliance = Appliance.objects.create(**appliance_data)

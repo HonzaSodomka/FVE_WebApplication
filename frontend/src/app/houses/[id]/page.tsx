@@ -24,15 +24,15 @@ interface ApiAppliance {
   name: string;
   power_consumption: number;
   appliance_type: "CONSTANT" | "CYCLIC" | "SCHEDULED" | "ON_DEMAND";
-  run_duration_min?: number;
-  run_duration_max?: number;
-  pause_duration_min?: number;
-  pause_duration_max?: number;
-  usage_duration_min?: number;
-  usage_duration_max?: number;
+  run_duration_min?: number | null;
+  run_duration_max?: number | null;
+  pause_duration_min?: number | null;
+  pause_duration_max?: number | null;
+  usage_duration_min?: number | null;
+  usage_duration_max?: number | null;
   uses_per_window?: number;
-  weekday_hours: number[][];
-  weekend_hours: number[][];
+  weekday_hours: number[][] | null;
+  weekend_hours: number[][] | null;
 }
 
 interface Appliance
@@ -47,14 +47,6 @@ export default function Page() {
   const [appliances, setAppliances] = useState<Appliance[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const transformOldToNewFormat = (windows: number[][]): TimeWindow[] => {
-    return windows.map((window) => ({
-      start: window[0],
-      end: window[1],
-      probability: 1.0,
-    }));
-  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -80,16 +72,9 @@ export default function Page() {
       );
       const appliancesData = await appliancesResponse.json();
 
-      // Transformace starého formátu na nový
-      const transformedAppliances = appliancesData.appliances.map(
-        (appliance: ApiAppliance) => ({
-          ...appliance,
-          weekday_hours: transformOldToNewFormat(appliance.weekday_hours),
-          weekend_hours: transformOldToNewFormat(appliance.weekend_hours),
-        })
-      );
+      
 
-      setAppliances(transformedAppliances);
+      setAppliances(appliancesData.appliances);
     } catch (err) {
       setError("Nepodařilo se načíst data");
       console.error(err);

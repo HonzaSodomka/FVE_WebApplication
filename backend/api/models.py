@@ -111,12 +111,14 @@ class Appliance(models.Model):
        verbose_name="Maximální doba běhu (minuty)",
    )
    weekday_hours = models.JSONField(
-       default=list,
+       null=True,
+       blank=True,
        verbose_name="Časová okna (pracovní den)",
        help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int}]"
    )
    weekend_hours = models.JSONField(
-       default=list,
+       null=True,
+       blank=True,
        verbose_name="Časová okna (víkend)",
        help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int}]"
    )
@@ -135,8 +137,8 @@ class Appliance(models.Model):
            self.pause_duration_max = None
            self.usage_duration_min = None
            self.usage_duration_max = None
-           self.weekday_hours = []
-           self.weekend_hours = []
+           self.weekday_hours = None
+           self.weekend_hours = None
            
        elif self.appliance_type == 'CYCLIC':
            self.is_active = None
@@ -144,8 +146,8 @@ class Appliance(models.Model):
            self.planned_starts = None
            self.usage_duration_min = None
            self.usage_duration_max = None
-           self.weekday_hours = []
-           self.weekend_hours = []
+           self.weekday_hours = None
+           self.weekend_hours = None
            
        elif self.appliance_type == 'SCHEDULED':
            self.in_standby = None

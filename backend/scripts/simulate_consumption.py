@@ -163,16 +163,9 @@ def simulate_minute_consumption():
                                         break
 
             elif app_type == 'ON_DEMAND':
-                # Načtení a zpracování JSON dat z databáze
-                if not remaining_minutes_list:
-                    remaining_minutes_list = []
-                else:
-                    remaining_minutes_list = json.loads(remaining_minutes_list)
-
-                if not planned_starts:
-                    planned_starts = []
-                else:
-                    planned_starts = json.loads(planned_starts)
+                # Inicializace nebo použití existujících seznamů
+                remaining_minutes_list = [] if remaining_minutes_list is None else remaining_minutes_list
+                planned_starts = [] if planned_starts is None else planned_starts
 
                 # Kontrola běžících spotřeb a jejich aktualizace
                 minute_consumption = 0
@@ -201,8 +194,7 @@ def simulate_minute_consumption():
                     next_hour = (current_time.hour + 1) % 24
                     windows = weekend_hours if is_weekend else weekday_hours
                     
-                    if windows:
-                        windows = json.loads(windows) if isinstance(windows, str) else windows
+                    if windows:  # windows už je list z databáze
                         for window in windows:
                             if window['start'] == next_hour:
                                 # Pro každé použití v okně
@@ -226,7 +218,7 @@ def simulate_minute_consumption():
                                         print(f"Spotřebič {appliance_id} (ON_DEMAND): Naplánován start na {planned_start}")
                                 break
 
-                # Aktualizace seznamů v databázi - převedení na JSONB
+                # Aktualizace seznamů v databázi
                 cur.execute("""
                     UPDATE api_appliance 
                     SET remaining_minutes_list = %s::jsonb,

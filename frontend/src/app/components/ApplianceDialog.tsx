@@ -90,8 +90,8 @@ export default function ApplianceDialog({
            : "",
        usage_duration_min: appliance.usage_duration_min?.toString() || "",
        usage_duration_max: appliance.usage_duration_max?.toString() || "",
-       weekday_hours: appliance.weekday_hours,
-       weekend_hours: appliance.weekend_hours,
+       weekday_hours: appliance.weekday_hours || [],
+       weekend_hours: appliance.weekend_hours || [], 
      });
    }
  }, [appliance]);

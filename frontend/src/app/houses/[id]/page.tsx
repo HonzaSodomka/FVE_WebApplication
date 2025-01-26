@@ -1,3 +1,5 @@
+"use client";
+
 import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -6,28 +8,32 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import HouseDialog from "@/app/components/HouseDialog";
 import ApplianceDialog from "@/app/components/ApplianceDialog";
-import { Appliance } from "@/types/appliance";  // Místo vlastní definice importujeme
+import { Appliance } from "@/types/appliance";
+import ConsumptionChart from "@/app/components/ConsumptionChart";
+import { DatePicker } from "@/components/ui/date-picker";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface House {
- id: number;
- name: string;
- solar_power: number;
- battery_capacity: number;
+  id: number;
+  name: string;
+  solar_power: number;
+  battery_capacity: number;
 }
 
+
 export default function Page() {
- const params = useParams();
- const [house, setHouse] = useState<House | null>(null);
- const [appliances, setAppliances] = useState<Appliance[]>([]);
- const [isLoading, setIsLoading] = useState(true);
- const [error, setError] = useState<string | null>(null);
+  const params = useParams();
+  const [house, setHouse] = useState<House | null>(null);
+  const [appliances, setAppliances] = useState<Appliance[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [date, setDate] = useState<Date>(new Date());
 
   const fetchData = useCallback(async () => {
     try {
       const houseResponse = await fetch(`${API_URL}/api/houses/`, {
-        credentials: "include", 
+        credentials: "include",
       });
       const houseData = await houseResponse.json();
       const currentHouse = houseData.houses.find(
@@ -43,12 +49,10 @@ export default function Page() {
       const appliancesResponse = await fetch(
         `${API_URL}/api/houses/${params.id}/appliances/`,
         {
-          credentials: "include", 
+          credentials: "include",
         }
       );
       const appliancesData = await appliancesResponse.json();
-
-      
 
       setAppliances(appliancesData.appliances);
     } catch (err) {
@@ -170,6 +174,15 @@ export default function Page() {
               )}
             </CardContent>
           </Card>
+          <div className="col-span-2">
+            <div className="mb-4 flex justify-end">
+              <DatePicker date={date} onSelect={setDate} />
+            </div>
+            <ConsumptionChart
+              houseId={parseInt(params.id as string)}
+              date={date}
+            />
+          </div>
         </div>
       </div>
     </main>

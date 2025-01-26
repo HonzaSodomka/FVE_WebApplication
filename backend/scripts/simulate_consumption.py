@@ -120,7 +120,7 @@ def simulate_minute_consumption():
                         WHERE id = %s
                     """, [appliance_id])
                 else:
-                    if next_start_time and current_time == next_start_time:
+                    if next_start_time and current_time.replace(tzinfo=None) == next_start_time.replace(tzinfo=None):
                         duration = random.randint(usage_duration_min, usage_duration_max)
                         cur.execute("""
                             UPDATE api_appliance 

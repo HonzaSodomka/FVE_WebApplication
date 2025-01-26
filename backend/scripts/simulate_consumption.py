@@ -132,7 +132,7 @@ def simulate_minute_consumption():
                         logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): Naplánován běh na {duration}min")
                     else:
                         minute_consumption = 0
-                        if current_time.minute == 59:
+                        if current_time.minute < 59:
                             next_hour = (current_time.hour + 1) % 24
                             windows = weekend_hours if is_weekend else weekday_hours
                             

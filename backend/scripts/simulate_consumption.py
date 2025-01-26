@@ -6,26 +6,28 @@ import random
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s: %(message)s'
+    format='[%(asctime)s] %(levelname)s: %(message)s',
+    filename='/app/logs/django.log',  # Stejný log soubor jako Django
+    filemode='a'  # Append mód
 )
 
 logger = logging.getLogger('api')
 
 def simulate_minute_consumption():
     try:
-        print("Začínám simulaci")
+        logger.info("Začínám simulaci")
         conn = psycopg2.connect(
             dbname="fve_db",
             user="postgres",
             password="heslo",
             host="db"
         )
-        print("Připojeno k databázi")
+        logger.info("Připojeno k databázi")
         cur = conn.cursor()
 
         current_time = datetime.now().replace(second=0, microsecond=0)
         is_weekend = current_time.weekday() >= 5
-        print(f"Simuluji pro čas: {current_time} ({'víkend' if is_weekend else 'pracovní den'})")
+        logger.info(f"Simuluji pro čas: {current_time} ({'víkend' if is_weekend else 'pracovní den'})")
         
         cur.execute("""
             SELECT 
@@ -51,7 +53,7 @@ def simulate_minute_consumption():
             JOIN api_appliance a ON h.id = a.house_id
         """)
         rows = cur.fetchall()
-        print(f"Nalezeno {len(rows)} spotřebičů")
+        logger.info(f"Nalezeno {len(rows)} spotřebičů")
         
         houses = {}
         for (house_id, appliance_id, power, app_type, is_active, in_standby, 
@@ -64,7 +66,7 @@ def simulate_minute_consumption():
                 
             if app_type == 'CONSTANT':
                 minute_consumption = power / 60
-                print(f"Spotřebič {appliance_id} (CONSTANT): {minute_consumption}W/min")
+                logger.debug(f"Spotřebič {appliance_id} (CONSTANT): {minute_consumption}W/min")
                 
             elif app_type == 'CYCLIC':
                 # NEJDŘÍV kontrola a změna stavu pokud je potřeba
@@ -92,14 +94,14 @@ def simulate_minute_consumption():
                         is_active = False
                         in_standby = True
                     
-                    print(f"Spotřebič {appliance_id} změnil stav, nový čas: {new_remaining}min")
+                    logger.debug(f"Spotřebič {appliance_id} změnil stav, nový čas: {new_remaining}min")
                     remaining_minutes = new_remaining
                 
                 if is_active:
                     minute_consumption = power / 60
                 else:
                     minute_consumption = (power * 0.1) / 60
-                print(f"Spotřebič {appliance_id} (CYCLIC): {minute_consumption}W/min (Active: {is_active})")
+                logger.debug(f"Spotřebič {appliance_id} (CYCLIC): {minute_consumption}W/min (Active: {is_active})")
                 
                 if remaining_minutes > 0:
                     cur.execute("""
@@ -111,7 +113,7 @@ def simulate_minute_consumption():
             elif app_type == 'SCHEDULED':
                 if remaining_minutes > 0:
                     minute_consumption = power / 60
-                    print(f"Spotřebič {appliance_id} (SCHEDULED): {minute_consumption}W/min (Zbývá: {remaining_minutes}min)")
+                    logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): {minute_consumption}W/min (Zbývá: {remaining_minutes}min)")
                     cur.execute("""
                         UPDATE api_appliance 
                         SET remaining_minutes = remaining_minutes - 1
@@ -127,7 +129,7 @@ def simulate_minute_consumption():
                             WHERE id = %s
                         """, [duration, appliance_id])
                         minute_consumption = 0
-                        print(f"Spotřebič {appliance_id} (SCHEDULED): Naplánován běh na {duration}min")
+                        logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): Naplánován běh na {duration}min")
                     else:
                         minute_consumption = 0
                         if current_time.minute == 59:
@@ -157,7 +159,7 @@ def simulate_minute_consumption():
                                                 SET next_start_time = %s
                                                 WHERE id = %s
                                             """, [next_start, appliance_id])
-                                            print(f"Spotřebič {appliance_id} (SCHEDULED): Naplánován na {next_start}")
+                                            logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): Naplánován na {next_start}")
                                         break
 
             elif app_type == 'ON_DEMAND':
@@ -185,7 +187,7 @@ def simulate_minute_consumption():
                         # Spustíme nový běh
                         duration = random.randint(usage_duration_min, usage_duration_max)
                         new_remaining_minutes.append(duration)
-                        print(f"Spotřebič {appliance_id} (ON_DEMAND): Spuštěn nový běh na {duration}min")
+                        logger.debug(f"Spotřebič {appliance_id} (ON_DEMAND): Spuštěn nový běh na {duration}min")
                     else:
                         new_planned_starts.append(start)
 
@@ -215,7 +217,7 @@ def simulate_minute_consumption():
                                             minute=target_minute
                                         )
                                         new_planned_starts.append(planned_start.strftime('%Y-%m-%d %H:%M:%S'))
-                                        print(f"Spotřebič {appliance_id} (ON_DEMAND): Naplánován start na {planned_start}")
+                                        logger.debug(f"Spotřebič {appliance_id} (ON_DEMAND): Naplánován start na {planned_start}")
                                 break
 
                 # Aktualizace seznamů v databázi
@@ -228,18 +230,18 @@ def simulate_minute_consumption():
 
             else:
                 minute_consumption = 0
-                print(f"Spotřebič {appliance_id}: přeskakuji (typ {app_type})")
+                logger.debug(f"Spotřebič {appliance_id}: přeskakuji (typ {app_type})")
                 
             houses[house_id].append({
                 "appliance_id": appliance_id,
                 "consumption_w": minute_consumption
             })
         
-        print(f"Zpracováno {len(houses)} domů")
+        logger.info(f"Zpracováno {len(houses)} domů")
         
         for house_id, appliances in houses.items():
             if appliances:
-                print(f"Ukládám data pro dům {house_id}: {json.dumps(appliances)}")
+                logger.debug(f"Ukládám data pro dům {house_id}: {json.dumps(appliances)}")
                 cur.execute("""
                     INSERT INTO api_consumptiondata (house_id, timestamp, appliance_consumption)
                     VALUES (%s, %s, %s)
@@ -248,10 +250,10 @@ def simulate_minute_consumption():
                 """, (house_id, current_time, json.dumps(appliances)))
         
         conn.commit()
-        print(f"Hotovo! Simulováno {len(houses)} domů v čase {current_time}")
+        logger.info(f"Hotovo! Simulováno {len(houses)} domů v čase {current_time}")
         
     except Exception as e:
-        print(f"Chyba: {str(e)}")
+        logger.error(f"Chyba při simulaci: {str(e)}")
         conn.rollback()
     finally:
         cur.close()

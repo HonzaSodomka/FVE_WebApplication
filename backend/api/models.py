@@ -46,130 +46,165 @@ class House(models.Model):
         verbose_name_plural = "Domy"
 
 class Appliance(models.Model):
-   # Základní pole
-   house = models.ForeignKey(
-       House,
-       on_delete=models.CASCADE,
-       related_name='appliances',
-       verbose_name="Dům"
-   )
-   name = models.CharField(max_length=100, verbose_name="Název spotřebiče")
-   power_consumption = models.IntegerField(verbose_name="Spotřeba (W)")
-   
-   APPLIANCE_TYPES = [
-       ('CONSTANT', 'Konstantní spotřeba'),      # např. router
-       ('CYCLIC', 'Cyklická spotřeba'),         # např. lednice
-       ('SCHEDULED', 'Plánovaná spotřeba'),      # např. pračka
-       ('ON_DEMAND', 'Spotřeba na vyžádání'),    # např. konvice
-   ]
-   appliance_type = models.CharField(
-       max_length=20,
-       choices=APPLIANCE_TYPES,
-       verbose_name="Typ spotřebiče"
-   )
+    # Základní pole
+    house = models.ForeignKey(
+        House,
+        on_delete=models.CASCADE,
+        related_name='appliances',
+        verbose_name="Dům"
+    )
+    name = models.CharField(max_length=100, verbose_name="Název spotřebiče")
+    power_consumption = models.IntegerField(verbose_name="Spotřeba (W)")
+    
+    APPLIANCE_TYPES = [
+        ('CONSTANT', 'Konstantní spotřeba'),      # např. router
+        ('CYCLIC', 'Cyklická spotřeba'),         # např. lednice
+        ('SCHEDULED', 'Plánovaná spotřeba'),      # např. pračka
+        ('ON_DEMAND', 'Spotřeba na vyžádání'),    # např. konvice
+    ]
+    appliance_type = models.CharField(
+        max_length=20,
+        choices=APPLIANCE_TYPES,
+        verbose_name="Typ spotřebiče"
+    )
 
-   # Stavové proměnné pro CYCLIC
-   in_standby = models.BooleanField(default=True, null=True)
-   remaining_minutes = models.IntegerField(default=0, null=True)
+    # Stavové proměnné pro CYCLIC
+    in_standby = models.BooleanField(default=True, null=True)
+    remaining_minutes = models.IntegerField(default=0, null=True)
 
-   # Konfigurační pole pro CYCLIC
-   run_duration_min = models.IntegerField(
-       null=True, 
-       blank=True,
-       verbose_name="Minimální doba běhu cyklu (minuty)",
-   )
-   run_duration_max = models.IntegerField(
-       null=True, 
-       blank=True,
-       verbose_name="Maximální doba běhu cyklu (minuty)",
-   )
-   pause_duration_min = models.IntegerField(
-       null=True, 
-       blank=True,
-       verbose_name="Minimální doba pauzy mezi cykly (minuty)",
-   )
-   pause_duration_max = models.IntegerField(
-       null=True, 
-       blank=True,
-       verbose_name="Maximální doba pauzy mezi cykly (minuty)",
-   )
+    # Konfigurační pole pro CYCLIC
+    run_duration_min = models.IntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="Minimální doba běhu cyklu (minuty)",
+    )
+    run_duration_max = models.IntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="Maximální doba běhu cyklu (minuty)",
+    )
+    pause_duration_min = models.IntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="Minimální doba pauzy mezi cykly (minuty)",
+    )
+    pause_duration_max = models.IntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="Maximální doba pauzy mezi cykly (minuty)",
+    )
 
-   # Stavové proměnné pro SCHEDULED/ON_DEMAND
-   is_active = models.BooleanField(default=False, null=True)
-   next_start_time = models.DateTimeField(null=True, blank=True)  # pro SCHEDULED
-   planned_starts = models.JSONField(default=list, null=True)     # pro ON_DEMAND
-   
-   # Konfigurační pole pro SCHEDULED/ON_DEMAND
-   usage_duration_min = models.IntegerField(
-       null=True, 
-       blank=True,
-       verbose_name="Minimální doba běhu (minuty)",
-   )
-   usage_duration_max = models.IntegerField(
-       null=True, 
-       blank=True,
-       verbose_name="Maximální doba běhu (minuty)",
-   )
-   weekday_hours = models.JSONField(
-       null=True,
-       blank=True,
-       verbose_name="Časová okna (pracovní den)",
-       help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int}]"
-   )
-   weekend_hours = models.JSONField(
-       null=True,
-       blank=True,
-       verbose_name="Časová okna (víkend)",
-       help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int}]"
-   )
+    # Stavové proměnné pro SCHEDULED/ON_DEMAND
+    is_active = models.BooleanField(default=False, null=True)
+    next_start_time = models.DateTimeField(null=True, blank=True)  # pro SCHEDULED
+    planned_starts = models.JSONField(default=list, null=True)     # pro ON_DEMAND
+    remaining_minutes_list = models.JSONField(                     # pro ON_DEMAND - seznam běžících časů
+        default=list,
+        null=True,
+        blank=True,
+        verbose_name="Seznam zbývajících minut pro paralelní běhy"
+    )
+    
+    # Konfigurační pole pro SCHEDULED/ON_DEMAND
+    usage_duration_min = models.IntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="Minimální doba běhu (minuty)",
+    )
+    usage_duration_max = models.IntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="Maximální doba běhu (minuty)",
+    )
+    weekday_hours = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="Časová okna (pracovní den)",
+        help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int}]"
+    )
+    weekend_hours = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="Časová okna (víkend)",
+        help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int}]"
+    )
 
-   def save(self, *args, **kwargs):
-       # Nastavení defaultních hodnot podle typu spotřebiče
-       if self.appliance_type == 'CONSTANT':
-           self.in_standby = None
-           self.remaining_minutes = None
-           self.is_active = None
-           self.next_start_time = None
-           self.planned_starts = None
-           self.run_duration_min = None
-           self.run_duration_max = None
-           self.pause_duration_min = None
-           self.pause_duration_max = None
-           self.usage_duration_min = None
-           self.usage_duration_max = None
-           self.weekday_hours = None
-           self.weekend_hours = None
-           
-       elif self.appliance_type == 'CYCLIC':
-           self.is_active = None
-           self.next_start_time = None
-           self.planned_starts = None
-           self.usage_duration_min = None
-           self.usage_duration_max = None
-           self.weekday_hours = None
-           self.weekend_hours = None
-           
-       elif self.appliance_type == 'SCHEDULED':
-           self.in_standby = None
-           self.run_duration_min = None
-           self.run_duration_max = None
-           self.pause_duration_min = None
-           self.pause_duration_max = None
-           self.planned_starts = None
-           
-       elif self.appliance_type == 'ON_DEMAND':
-           self.in_standby = None
-           self.run_duration_min = None
-           self.run_duration_max = None
-           self.pause_duration_min = None
-           self.pause_duration_max = None
-           self.next_start_time = None
+    def save(self, *args, **kwargs):
+        # Nastavení defaultních hodnot podle typu spotřebiče
+        if self.appliance_type == 'CONSTANT':
+            self.in_standby = None
+            self.remaining_minutes = None
+            self.is_active = None
+            self.next_start_time = None
+            self.planned_starts = None
+            self.remaining_minutes_list = None
+            self.run_duration_min = None
+            self.run_duration_max = None
+            self.pause_duration_min = None
+            self.pause_duration_max = None
+            self.usage_duration_min = None
+            self.usage_duration_max = None
+            self.weekday_hours = None
+            self.weekend_hours = None
+            
+        elif self.appliance_type == 'CYCLIC':
+            self.is_active = None
+            self.next_start_time = None
+            self.planned_starts = None
+            self.remaining_minutes_list = None
+            self.usage_duration_min = None
+            self.usage_duration_max = None
+            self.weekday_hours = None
+            self.weekend_hours = None
+            
+        elif self.appliance_type == 'SCHEDULED':
+            self.in_standby = None
+            self.remaining_minutes_list = None
+            self.run_duration_min = None
+            self.run_duration_max = None
+            self.pause_duration_min = None
+            self.pause_duration_max = None
+            self.planned_starts = None
+            
+        elif self.appliance_type == 'ON_DEMAND':
+            self.in_standby = None
+            self.remaining_minutes = None
+            self.run_duration_min = None
+            self.run_duration_max = None
+            self.pause_duration_min = None
+            self.pause_duration_max = None
+            self.next_start_time = None
+            if not self.remaining_minutes_list:
+                self.remaining_minutes_list = list()
+            if not self.planned_starts:
+                self.planned_starts = list()
 
-       super().save(*args, **kwargs)
+        super().save(*args, **kwargs)
 
-   def __str__(self):
-       return f"{self.name} ({self.get_appliance_type_display()}) - {self.house.name}"
+    def __str__(self):
+        return f"{self.name} ({self.get_appliance_type_display()}) - {self.house.name}"
 
-   class Meta:
-       verbose_name = "Spotřebič"
-       verbose_name_plural = "Spotřebiče"
+    class Meta:
+        verbose_name = "Spotřebič"
+        verbose_name_plural = "Spotřebiče"
+
+class ConsumptionData(models.Model):
+    house = models.ForeignKey(
+        House,
+        on_delete=models.CASCADE,
+        related_name='consumption_data'
+    )
+    timestamp = models.DateTimeField()
+    # JSON ve formátu [{"appliance_id": 1, "consumption_w": 100}, ...]
+    appliance_consumption = models.JSONField()
+    
+    class Meta:
+        unique_together = ['house', 'timestamp']  
+        indexes = [
+            models.Index(fields=['house', 'timestamp']),
+        ]
+        ordering = ['timestamp']
+
+    def __str__(self):
+        total = sum(item['consumption_w'] for item in self.appliance_consumption)
+        return f"{self.house.name} - {self.timestamp}: {total}W"

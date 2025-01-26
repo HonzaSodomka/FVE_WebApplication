@@ -1,5 +1,3 @@
-"use client";
-
 import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -8,45 +6,23 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import HouseDialog from "@/app/components/HouseDialog";
 import ApplianceDialog from "@/app/components/ApplianceDialog";
-import { TimeWindow } from "@/types/appliance";
+import { Appliance } from "@/types/appliance";  // Místo vlastní definice importujeme
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 interface House {
-  id: number;
-  name: string;
-  solar_power: number;
-  battery_capacity: number;
-}
-
-interface ApiAppliance {
-  id: number;
-  name: string;
-  power_consumption: number;
-  appliance_type: "CONSTANT" | "CYCLIC" | "SCHEDULED" | "ON_DEMAND";
-  run_duration_min?: number | null;
-  run_duration_max?: number | null;
-  pause_duration_min?: number | null;
-  pause_duration_max?: number | null;
-  usage_duration_min?: number | null;
-  usage_duration_max?: number | null;
-  uses_per_window?: number;
-  weekday_hours: number[][] | null;
-  weekend_hours: number[][] | null;
-}
-
-interface Appliance
-  extends Omit<ApiAppliance, "weekday_hours" | "weekend_hours"> {
-  weekday_hours: TimeWindow[];
-  weekend_hours: TimeWindow[];
+ id: number;
+ name: string;
+ solar_power: number;
+ battery_capacity: number;
 }
 
 export default function Page() {
-  const params = useParams();
-  const [house, setHouse] = useState<House | null>(null);
-  const [appliances, setAppliances] = useState<Appliance[]>([]);
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+ const params = useParams();
+ const [house, setHouse] = useState<House | null>(null);
+ const [appliances, setAppliances] = useState<Appliance[]>([]);
+ const [isLoading, setIsLoading] = useState(true);
+ const [error, setError] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     try {

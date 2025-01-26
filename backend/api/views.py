@@ -1,5 +1,5 @@
 from django.http import JsonResponse
-from .models import PriceData, SolarData, House, Appliance
+from .models import ConsumptionData, PriceData, SolarData, House, Appliance
 from datetime import datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -215,7 +215,16 @@ def house_appliances(request, house_id):
         
     if request.method == "GET":
         try:
-            appliances = list(house.appliances.values())
+            appliances = list(house.appliances.values(
+                'id', 'name', 'power_consumption', 'appliance_type',
+                'run_duration_min', 'run_duration_max',
+                'pause_duration_min', 'pause_duration_max',
+                'usage_duration_min', 'usage_duration_max',
+                'weekday_hours', 'weekend_hours',
+                'remaining_minutes_list', 'planned_starts',
+                'is_active', 'in_standby', 'remaining_minutes',
+                'next_start_time'
+            ))
             logger.info(f"Successfully returned {len(appliances)} appliances for house {house_id}")
             return JsonResponse({'appliances': appliances})
         except Exception as e:
@@ -227,14 +236,13 @@ def house_appliances(request, house_id):
             data = json.loads(request.body)
             logger.info(f"Received request to create appliance for house {house_id}: {data}")
             
-            # Příprava společných dat pro spotřebič
             appliance_data = {
                 'house': house,
                 'name': data['name'],
                 'power_consumption': data['power_consumption'],
                 'appliance_type': data['appliance_type']
             }
-            # Vytvoření spotřebiče s ohledem na jeho typ
+            
             if data['appliance_type'] == 'CYCLIC':
                 appliance = Appliance.objects.create(
                     **appliance_data,
@@ -258,17 +266,17 @@ def house_appliances(request, house_id):
                     usage_duration_max=data['usage_duration_max'],
                     weekday_hours=data.get('weekday_hours', None),
                     weekend_hours=data.get('weekend_hours', None),
+                    remaining_minutes_list=[],
+                    planned_starts=[]
                 )
             elif data['appliance_type'] == 'CONSTANT':
                 appliance = Appliance.objects.create(**appliance_data)
             else:
-                # Neznámý typ spotřebiče
                 logger.error(f"Unknown appliance type: {data['appliance_type']}")
                 return JsonResponse({'error': 'Neznámý typ spotřebiče'}, status=400)
             
             logger.info(f"Successfully created appliance {appliance.id} for house {house_id}")
             
-            # Vrácení všech polí objektu
             return JsonResponse({
                 'id': appliance.id,
                 'name': appliance.name,
@@ -281,7 +289,13 @@ def house_appliances(request, house_id):
                 'usage_duration_min': appliance.usage_duration_min,
                 'usage_duration_max': appliance.usage_duration_max,
                 'weekday_hours': appliance.weekday_hours,
-                'weekend_hours': appliance.weekend_hours
+                'weekend_hours': appliance.weekend_hours,
+                'remaining_minutes_list': appliance.remaining_minutes_list,
+                'planned_starts': appliance.planned_starts,
+                'is_active': appliance.is_active,
+                'in_standby': appliance.in_standby,
+                'remaining_minutes': appliance.remaining_minutes,
+                'next_start_time': appliance.next_start_time
             })
             
         except KeyError as e:
@@ -321,7 +335,6 @@ def house_appliances(request, house_id):
             data = json.loads(request.body)
             logger.info(f"Received request to update appliance {appliance_id}: {data}")
             
-            # Základní pole
             if 'name' in data:
                 appliance.name = data['name']
             if 'power_consumption' in data:
@@ -329,7 +342,6 @@ def house_appliances(request, house_id):
             if 'appliance_type' in data:
                 appliance.appliance_type = data['appliance_type']
 
-            # Pole podle typu spotřebiče
             if appliance.appliance_type == 'CYCLIC':
                 if 'run_duration_min' in data:
                     appliance.run_duration_min = data['run_duration_min']
@@ -349,7 +361,6 @@ def house_appliances(request, house_id):
                     appliance.weekday_hours = data['weekday_hours']
                 if 'weekend_hours' in data:
                     appliance.weekend_hours = data['weekend_hours']
-                    
             
             appliance.save()
             logger.info(f"Successfully updated appliance {appliance_id}")
@@ -366,7 +377,13 @@ def house_appliances(request, house_id):
                 'usage_duration_min': appliance.usage_duration_min,
                 'usage_duration_max': appliance.usage_duration_max,
                 'weekday_hours': appliance.weekday_hours,
-                'weekend_hours': appliance.weekend_hours
+                'weekend_hours': appliance.weekend_hours,
+                'remaining_minutes_list': appliance.remaining_minutes_list,
+                'planned_starts': appliance.planned_starts,
+                'is_active': appliance.is_active,
+                'in_standby': appliance.in_standby,
+                'remaining_minutes': appliance.remaining_minutes,
+                'next_start_time': appliance.next_start_time
             })
             
         except Appliance.DoesNotExist:
@@ -374,4 +391,63 @@ def house_appliances(request, house_id):
             return JsonResponse({'error': 'Spotřebič nenalezen'}, status=404)
         except Exception as e:
             logger.error(f"Error updating appliance {appliance_id}: {str(e)}")
+            return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+
+@csrf_exempt
+@require_http_methods(["GET", "POST"])
+def consumption_data(request, house_id):
+    try:
+        house = House.objects.get(id=house_id)
+    except House.DoesNotExist:
+        logger.warning(f"Attempted to access consumption for non-existent house with ID {house_id}")
+        return JsonResponse({'error': 'Dům nenalezen'}, status=404)
+        
+    # GET - vrátí spotřebu pro zadaný den včetně rozpisu po spotřebičích
+    if request.method == "GET":
+        try:
+            date_str = request.GET.get('date')
+            if not date_str:
+                return JsonResponse({'error': 'Chybí parametr date'}, status=400)
+                
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            consumption = ConsumptionData.objects.filter(
+                house=house,
+                timestamp__date=date
+            ).order_by('timestamp')
+            
+            data = [{
+                'timestamp': c.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+                'appliances': c.appliance_consumption
+            } for c in consumption]
+            
+            return JsonResponse({'consumption': data})
+            
+        except ValueError:
+            return JsonResponse({'error': 'Neplatný formát data'}, status=400)
+        except Exception as e:
+            logger.error(f"Error fetching consumption: {str(e)}")
+            return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+            
+    # POST - uloží simulovanou spotřebu
+    elif request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            timestamp = datetime.strptime(data['timestamp'], '%Y-%m-%d %H:%M:%S')
+            appliance_consumption = data['appliances']
+            
+            # Uloží nebo aktualizuje záznam
+            ConsumptionData.objects.update_or_create(
+                house=house,
+                timestamp=timestamp,
+                defaults={'appliance_consumption': appliance_consumption}
+            )
+            
+            return JsonResponse({'message': 'Data uložena'})
+            
+        except KeyError as e:
+            return JsonResponse({'error': f'Chybějící pole: {str(e)}'}, status=400)
+        except ValueError as e:
+            return JsonResponse({'error': f'Neplatná data: {str(e)}'}, status=400)
+        except Exception as e:
+            logger.error(f"Error saving consumption: {str(e)}")
             return JsonResponse({'error': 'Interní chyba serveru'}, status=500)

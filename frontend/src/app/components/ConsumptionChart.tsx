@@ -15,8 +15,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+// Upravené rozhraní podle nového modelu
 interface ConsumptionData {
-  timestamp: string;
+  date: string;
+  time: string;  // "HH:MM" formát
   appliances: {
     appliance_id: number;
     consumption_w: number;
@@ -58,9 +60,9 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
     fetchData();
   }, [houseId, date]);
 
-  // Převedení dat do formátu pro graf
+  // Převedení dat do formátu pro graf - teď používáme přímo time string
   const chartData = data.map((item) => ({
-    time: format(new Date(item.timestamp), "HH:mm"),
+    time: item.time,  // Už nemusíme formátovat, přichází ve správném formátu
     consumption: item.appliances.reduce(
       (sum, appliance) => sum + appliance.consumption_w,
       0
@@ -129,7 +131,6 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
                   payload.length &&
                   payload[0]?.value !== undefined
                 ) {
-                  // Přidej bezpečnostní kontroly
                   const value = payload[0].value;
                   const formattedValue = Array.isArray(value)
                     ? parseFloat(value[0] as string).toFixed(2)

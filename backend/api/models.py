@@ -192,19 +192,31 @@ class ConsumptionData(models.Model):
     house = models.ForeignKey(
         House,
         on_delete=models.CASCADE,
-        related_name='consumption_data'
+        related_name='consumption_data',
+        verbose_name="Dům"
     )
-    timestamp = models.DateTimeField()
-    # JSON ve formátu [{"appliance_id": 1, "consumption_w": 100}, ...]
-    appliance_consumption = models.JSONField()
+    date = models.DateField(verbose_name="Datum")
+    time = models.CharField(max_length=5, verbose_name="Čas")  # "HH:MM" formát
+    appliance_consumption = models.JSONField(
+        verbose_name="Spotřeba spotřebičů",
+        help_text="Seznam ve formátu [{'appliance_id': 1, 'consumption_w': 100}, ...]"
+    )
     
     class Meta:
-        unique_together = ['house', 'timestamp']  
+        unique_together = ['house', 'date', 'time']  
         indexes = [
-            models.Index(fields=['house', 'timestamp']),
+            models.Index(fields=['house', 'date', 'time']),
         ]
-        ordering = ['timestamp']
+        ordering = ['date', 'time']
+        verbose_name = "Spotřeba"
+        verbose_name_plural = "Spotřeby"
+
+    def clean(self):
+        import re
+        if not re.match(r'^([0-1][0-9]|2[0-3]):[0-5][0-9]$', self.time):
+            from django.core.exceptions import ValidationError
+            raise ValidationError({'time': 'Čas musí být ve formátu HH:MM (00:00-23:59)'})
 
     def __str__(self):
         total = sum(item['consumption_w'] for item in self.appliance_consumption)
-        return f"{self.house.name} - {self.timestamp}: {total}W"
+        return f"{self.house.name} - {self.date} {self.time}: {total}W"

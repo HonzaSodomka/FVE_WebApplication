@@ -196,21 +196,12 @@ class ConsumptionData(models.Model):
         related_name='consumption_data',
         verbose_name="Dům"
     )
-    date = models.DateField(verbose_name="Datum", default=date.today)
-    time = models.CharField(max_length=5, verbose_name="Čas", default="00:00")
+    date = models.DateField(verbose_name="Datum", null=True)  # přidáno null=True
+    time = models.CharField(max_length=5, verbose_name="Čas", null=True)  # přidáno null=True
     appliance_consumption = models.JSONField(
         verbose_name="Spotřeba spotřebičů",
         help_text="Seznam ve formátu [{'appliance_id': 1, 'consumption_w': 100}, ...]"
     )
-    
-    class Meta:
-        unique_together = ['house', 'date', 'time']  
-        indexes = [
-            models.Index(fields=['house', 'date', 'time']),
-        ]
-        ordering = ['date', 'time']
-        verbose_name = "Spotřeba"
-        verbose_name_plural = "Spotřeby"
 
     def clean(self):
         import re

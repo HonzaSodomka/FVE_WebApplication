@@ -1,4 +1,5 @@
 from django.db import models
+from datetime import date
 
 class PriceData(models.Model):
     date = models.DateField()
@@ -195,8 +196,8 @@ class ConsumptionData(models.Model):
         related_name='consumption_data',
         verbose_name="Dům"
     )
-    date = models.DateField(verbose_name="Datum")
-    time = models.CharField(max_length=5, verbose_name="Čas")  # "HH:MM" formát
+    date = models.DateField(verbose_name="Datum", default=date.today)
+    time = models.CharField(max_length=5, verbose_name="Čas", default="00:00")
     appliance_consumption = models.JSONField(
         verbose_name="Spotřeba spotřebičů",
         help_text="Seznam ve formátu [{'appliance_id': 1, 'consumption_w': 100}, ...]"

@@ -430,7 +430,7 @@ export default function ApplianceDialog({
                    setFormData({ ...formData, weekday_hours: windows })
                  }
                  label="Časová okna - pracovní dny"
-                 maxWindows={3}
+                 maxWindows={24}
                  showUses={formData.appliance_type === "ON_DEMAND"}
                />
 
@@ -440,7 +440,7 @@ export default function ApplianceDialog({
                    setFormData({ ...formData, weekend_hours: windows })
                  }
                  label="Časová okna - víkendy"
-                 maxWindows={3}
+                 maxWindows={24}
                  showUses={formData.appliance_type === "ON_DEMAND"}
                />
              </div>

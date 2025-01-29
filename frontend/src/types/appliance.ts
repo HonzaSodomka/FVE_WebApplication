@@ -9,6 +9,7 @@ export interface Appliance {
   id: number;
   name: string;
   power_consumption: number;
+  standby_power?: number | null;
   appliance_type: "CONSTANT" | "CYCLIC" | "SCHEDULED" | "ON_DEMAND";
   run_duration_min?: number | null;
   run_duration_max?: number | null;

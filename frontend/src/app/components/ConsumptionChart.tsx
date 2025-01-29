@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { format } from "date-fns";
+import { format, isToday } from "date-fns";
 import {
   LineChart,
   Line,
@@ -10,12 +10,12 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
+  ReferenceLine,
 } from "recharts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// Upravené rozhraní pro nový formát dat
 interface ConsumptionData {
   hour: number;
   consumption_wh: number;
@@ -29,6 +29,16 @@ interface ChartProps {
 export default function ConsumptionChart({ houseId, date }: ChartProps) {
   const [data, setData] = useState<ConsumptionData[]>([]);
   const [error, setError] = useState<string | null>(null);
+  const [currentHour, setCurrentHour] = useState<number>(new Date().getHours());
+
+  // Efekt pro aktualizaci currentHour každou minutu
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentHour(new Date().getHours());
+    }, 60000); // Každou minutu
+
+    return () => clearInterval(interval);
+  }, []);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -54,12 +64,20 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
     };
 
     fetchData();
+
+    // Pro aktuální den nastavíme interval pro pravidelné načítání dat
+    if (isToday(date)) {
+      const interval = setInterval(fetchData, 60000); // Každou minutu
+      return () => clearInterval(interval);
+    }
   }, [houseId, date]);
 
-  // Převedení dat do formátu pro graf
+  // Zpracování dat pro graf
   const chartData = data.map((item) => ({
     time: `${String(item.hour).padStart(2, "0")}:00`,
-    consumption: item.consumption_wh,  // Už je ve watthodinách
+    consumption: item.consumption_wh,
+    isLive: isToday(date) && item.hour === currentHour,
+    hour: item.hour,
   }));
 
   if (error) {
@@ -89,6 +107,11 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
             />
           </svg>
           Spotřeba elektřiny
+          {isToday(date) && (
+            <span className="ml-2 text-sm bg-green-100 text-green-800 px-2 py-1 rounded-full">
+              Live
+            </span>
+          )}
         </h2>
         <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
           {format(date, "dd. MM. yyyy")}
@@ -110,37 +133,44 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
             <YAxis
               tick={{ fill: "#6B7280", fontSize: 12 }}
               label={{
-                value: "Spotřeba (Wh)",  // Změněno na Wh místo W
+                value: "Spotřeba (Wh)",
                 angle: -90,
                 position: "insideLeft",
                 style: { fill: "#6B7280" },
               }}
             />
+            {isToday(date) && (
+              <ReferenceLine
+                x={`${String(currentHour).padStart(2, "0")}:00`}
+                stroke="#10B981"
+                strokeDasharray="3 3"
+                label={{
+                  value: "Aktuální čas",
+                  position: "top",
+                  fill: "#10B981",
+                }}
+              />
+            )}
             <Tooltip
               content={({ active, payload, label }) => {
-                if (
-                  active &&
-                  payload &&
-                  payload.length &&
-                  payload[0]?.value !== undefined
-                ) {
-                  const value = payload[0].value;
-                  const formattedValue = Array.isArray(value)
-                    ? parseFloat(value[0] as string).toFixed(2)
-                    : typeof value === "number"
-                    ? value.toFixed(2)
-                    : parseFloat(value).toFixed(2);
-
+                if (active && payload && payload.length) {
+                  const data = payload[0].payload;
                   return (
                     <div className="bg-white p-3 border rounded-lg shadow">
                       <p className="font-bold">{label}</p>
-                      <p>Spotřeba: {formattedValue} Wh</p>
+                      <p>
+                        Spotřeba: {payload[0].value?.toFixed(2)} Wh
+                        {data.isLive && (
+                          <span className="ml-2 text-green-600">(Live)</span>
+                        )}
+                      </p>
                     </div>
                   );
                 }
                 return null;
               }}
             />
+            {/* Historická data */}
             <Line
               type="monotone"
               dataKey="consumption"

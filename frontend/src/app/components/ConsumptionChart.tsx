@@ -15,14 +15,10 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
-// Upravené rozhraní podle nového modelu
+// Upravené rozhraní pro nový formát dat
 interface ConsumptionData {
-  date: string;
-  time: string;  // "HH:MM" formát
-  appliances: {
-    appliance_id: number;
-    consumption_w: number;
-  }[];
+  hour: number;
+  consumption_wh: number;
 }
 
 interface ChartProps {
@@ -60,13 +56,10 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
     fetchData();
   }, [houseId, date]);
 
-  // Převedení dat do formátu pro graf - teď používáme přímo time string
+  // Převedení dat do formátu pro graf
   const chartData = data.map((item) => ({
-    time: item.time,  // Už nemusíme formátovat, přichází ve správném formátu
-    consumption: item.appliances.reduce(
-      (sum, appliance) => sum + appliance.consumption_w,
-      0
-    ),
+    time: `${String(item.hour).padStart(2, "0")}:00`,
+    consumption: item.consumption_wh,  // Už je ve watthodinách
   }));
 
   if (error) {
@@ -117,7 +110,7 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
             <YAxis
               tick={{ fill: "#6B7280", fontSize: 12 }}
               label={{
-                value: "Spotřeba (W)",
+                value: "Spotřeba (Wh)",  // Změněno na Wh místo W
                 angle: -90,
                 position: "insideLeft",
                 style: { fill: "#6B7280" },
@@ -141,7 +134,7 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
                   return (
                     <div className="bg-white p-3 border rounded-lg shadow">
                       <p className="font-bold">{label}</p>
-                      <p>Spotřeba: {formattedValue} W</p>
+                      <p>Spotřeba: {formattedValue} Wh</p>
                     </div>
                   );
                 }

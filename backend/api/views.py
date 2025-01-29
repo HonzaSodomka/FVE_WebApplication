@@ -396,71 +396,105 @@ def house_appliances(request, house_id):
 @csrf_exempt
 @require_http_methods(["GET", "POST"])
 def consumption_data(request, house_id):
-   try:
-       house = House.objects.get(id=house_id)
-   except House.DoesNotExist:
-       logger.warning(f"Attempted to access consumption for non-existent house with ID {house_id}")
-       return JsonResponse({'error': 'Dům nenalezen'}, status=404)
-       
-   # GET - vrátí spotřebu pro zadaný den včetně rozpisu po spotřebičích
-   if request.method == "GET":
-       try:
-           date_str = request.GET.get('date')
-           if not date_str:
-               return JsonResponse({'error': 'Chybí parametr date'}, status=400)
-               
-           date = datetime.strptime(date_str, '%Y-%m-%d').date()
-           consumption = ConsumptionData.objects.filter(
-               house=house,
-               date=date
-           ).order_by('time')  # Seřadí podle času
-           
-           data = [{
-               'date': c.date.strftime('%Y-%m-%d'),
-               'time': c.time,
-               'appliances': c.appliance_consumption
-           } for c in consumption]
-           
-           logger.info(f"Successfully returned {len(data)} consumption records for house {house_id} on {date}")
-           return JsonResponse({'consumption': data})
-           
-       except ValueError:
-           logger.error(f"Invalid date format received: {date_str}")
-           return JsonResponse({'error': 'Neplatný formát data'}, status=400)
-       except Exception as e:
-           logger.error(f"Error fetching consumption: {str(e)}")
-           return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
-           
-   # POST - uloží simulovanou spotřebu
-   elif request.method == "POST":
-       try:
-           data = json.loads(request.body)
-           # Parse timestamp string do date a time
-           timestamp = datetime.strptime(data['timestamp'], '%Y-%m-%d %H:%M:%S')
-           date = timestamp.date()
-           time = timestamp.strftime('%H:%M')
-           appliance_consumption = data['appliances']
-           
-           # Uloží nebo aktualizuje záznam
-           consumption, created = ConsumptionData.objects.update_or_create(
-               house=house,
-               date=date,
-               time=time,
-               defaults={'appliance_consumption': appliance_consumption}
-           )
-           
-           # Log info o uložení
-           action = "vytvořena" if created else "aktualizována"
-           logger.info(f"Spotřeba pro dům {house.id} byla {action} (datum: {date}, čas: {time})")
-           
-           return JsonResponse({'message': 'Data uložena'})
-           
-       except KeyError as e:
-           logger.error(f"Chybějící pole v požadavku: {str(e)}")
-           return JsonResponse({'error': f'Chybějící pole: {str(e)}'}, status=400)
-       except ValueError as e:
-           logger.error(f"Neplatný formát dat: {str(e)}")
-           return JsonResponse({'error': f'Neplatná data: {str(e)}'}, status=400)
-       except Exception as e:
-           logger.error(f"Error saving consumption: {str(e)}")
-           return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+    try:
+        house = House.objects.get(id=house_id)
+    except House.DoesNotExist:
+        logger.warning(f"Attempted to access consumption for non-existent house with ID {house_id}")
+        return JsonResponse({'error': 'Dům nenalezen'}, status=404)
+        
+    # GET - vrátí spotřebu agregovanou po hodinách
+    if request.method == "GET":
+        try:
+            date_str = request.GET.get('date')
+            if not date_str:
+                return JsonResponse({'error': 'Chybí parametr date'}, status=400)
+                
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            # Získá všechny záznamy pro daný den
+            consumption = ConsumptionData.objects.filter(
+                house=house,
+                date=date
+            ).order_by('time')
+            
+            # Slovník pro ukládání hodinové spotřeby
+            hourly_consumption = {}
+            
+            # Zpracování dat po minutách do hodinových součtů
+            for record in consumption:
+                # Získání hodiny z času (např. z "14:30" získá "14")
+                hour = int(record.time.split(':')[0])
+                
+                # Inicializace pokud hodina ještě neexistuje
+                if hour not in hourly_consumption:
+                    hourly_consumption[hour] = 0
+                
+                # Sečtení spotřeby všech spotřebičů za danou minutu
+                minute_consumption = sum(
+                    item['consumption_w'] 
+                    for item in record.appliance_consumption
+                )
+                
+                # Přičtení k hodinové spotřebě (převod z W/min na Wh)
+                hourly_consumption[hour] += minute_consumption / 60
+            
+            # Formátování výstupu
+            data = [{
+                'hour': hour,
+                'consumption_wh': round(consumption_wh, 2)
+            } for hour, consumption_wh in sorted(hourly_consumption.items())]
+            
+            # Doplnění chybějících hodin nulovou spotřebou
+            all_hours = set(range(24))
+            existing_hours = {record['hour'] for record in data}
+            missing_hours = all_hours - existing_hours
+            
+            for hour in missing_hours:
+                data.append({
+                    'hour': hour,
+                    'consumption_wh': 0
+                })
+            
+            # Seřazení podle hodin
+            data.sort(key=lambda x: x['hour'])
+            
+            logger.info(f"Successfully returned hourly consumption for house {house_id} on {date}")
+            return JsonResponse({'consumption': data})
+            
+        except ValueError:
+            logger.error(f"Invalid date format received: {date_str}")
+            return JsonResponse({'error': 'Neplatný formát data'}, status=400)
+        except Exception as e:
+            logger.error(f"Error fetching consumption: {str(e)}")
+            return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+            
+    # POST - uloží simulovanou spotřebu (beze změny)
+    elif request.method == "POST":
+        try:
+            data = json.loads(request.body)
+            timestamp = datetime.strptime(data['timestamp'], '%Y-%m-%d %H:%M:%S')
+            date = timestamp.date()
+            time = timestamp.strftime('%H:%M')
+            appliance_consumption = data['appliances']
+            
+            consumption, created = ConsumptionData.objects.update_or_create(
+                house=house,
+                date=date,
+                time=time,
+                defaults={'appliance_consumption': appliance_consumption}
+            )
+            
+            action = "vytvořena" if created else "aktualizována"
+            logger.info(f"Spotřeba pro dům {house.id} byla {action} (datum: {date}, čas: {time})")
+            
+            return JsonResponse({'message': 'Data uložena'})
+            
+        except KeyError as e:
+            logger.error(f"Chybějící pole v požadavku: {str(e)}")
+            return JsonResponse({'error': f'Chybějící pole: {str(e)}'}, status=400)
+        except ValueError as e:
+            logger.error(f"Neplatný formát dat: {str(e)}")
+            return JsonResponse({'error': f'Neplatná data: {str(e)}'}, status=400)
+        except Exception as e:
+            logger.error(f"Error saving consumption: {str(e)}")
+            return JsonResponse({'error': 'Interní chyba serveru'}, status=500)

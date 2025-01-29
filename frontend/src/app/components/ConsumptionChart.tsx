@@ -100,7 +100,7 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
 
       // Výpočet časového rozsahu pro tooltip
       const startHour = data.hour - 1;
-      const timeRange = `${String(startHour).padStart(2, "0")}:00 - ${String(data.hour).padStart(2, "0")}:59`;
+      const timeRange = `${String(startHour).padStart(2, "0")}:00 - ${String(startHour).padStart(2, "0")}:59`;
 
       return (
         <div className="bg-white p-3 border rounded-lg shadow">

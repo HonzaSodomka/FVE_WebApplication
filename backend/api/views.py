@@ -421,17 +421,22 @@ def consumption_data(request, house_id):
             
             # Zpracování dat po minutách do hodinových součtů
             for record in consumption:
-                hour = int(record.time.split(':')[0])
+                time_parts = record.time.split(':')
+                minute = int(time_parts[1])
+                hour = int(time_parts[0])
                 
-                if hour not in hourly_consumption:
-                    hourly_consumption[hour] = 0
+                # Určení hodiny pro zobrazení (1:00 bude obsahovat data 0:00-0:59)
+                display_hour = (hour + 1) % 24
+                
+                if display_hour not in hourly_consumption:
+                    hourly_consumption[display_hour] = 0
                 
                 minute_consumption = sum(
                     item['consumption_w'] 
                     for item in record.appliance_consumption
                 )
                 
-                hourly_consumption[hour] += minute_consumption / 60
+                hourly_consumption[display_hour] += minute_consumption / 60
             
             # Formátování výstupu
             data = [{
@@ -441,11 +446,13 @@ def consumption_data(request, house_id):
             
             # Přidání aktuálního času serveru
             current_time = datetime.now()
+            display_hour = (current_time.hour + 1) % 24
             
             logger.info(f"Successfully returned hourly consumption for house {house_id} on {date}")
             return JsonResponse({
                 'consumption': data,
-                'current_time': current_time.isoformat()
+                'current_time': current_time.isoformat(),
+                'display_hour': display_hour
             })
             
         except ValueError:

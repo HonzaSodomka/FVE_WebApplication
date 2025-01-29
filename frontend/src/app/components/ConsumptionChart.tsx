@@ -23,7 +23,7 @@ interface ConsumptionData {
 
 interface ChartData {
   time: string;
-  consumption: number;
+  consumption: number | null;
   isLive: boolean;
   hour: number;
 }
@@ -67,31 +67,35 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
     fetchData();
 
     if (isToday(date)) {
-      const interval = setInterval(fetchData, 60000); // Aktualizace každou minutu
+      const interval = setInterval(fetchData, 60000);
       return () => clearInterval(interval);
     }
   }, [houseId, date]);
 
-  const chartData: ChartData[] = data
-    .filter(item => {
-      if (!isToday(date)) return true;
-      if (!serverTime) return true;
-      return item.hour <= serverTime.getHours();
-    })
-    .map((item) => ({
-      time: `${String(item.hour).padStart(2, "0")}:00`,
-      consumption: item.consumption_wh,
-      isLive: serverTime ? item.hour === serverTime.getHours() : false,
-      hour: item.hour,
-    }))
-    .sort((a, b) => a.hour - b.hour);
+  // Vytvořit pole všech hodin (1-24) a naplnit daty nebo null pro budoucí hodiny
+  const chartData: ChartData[] = Array.from({ length: 24 }, (_, index) => {
+    const hour = index + 1; // Hodiny 1-24 místo 0-23
+    const dataHour = index; // Index pro data (0-23)
+    const hourData = data.find(item => item.hour === dataHour);
+    
+    const isCurrentDay = isToday(date);
+    const currentHour = serverTime ? serverTime.getHours() + 1 : 24; // Posun o 1 pro zobrazení
+    const isFutureHour = isCurrentDay && hour > currentHour;
+
+    return {
+      time: `${String(hour).padStart(2, "0")}:00`,
+      consumption: isFutureHour ? null : (hourData?.consumption_wh || 0),
+      isLive: serverTime ? hour === currentHour : false,
+      hour,
+    };
+  });
 
   const CustomTooltip = ({
     active,
     payload,
     label,
   }: TooltipProps<number, string>) => {
-    if (active && payload && payload.length > 0) {
+    if (active && payload && payload.length > 0 && payload[0].value !== null) {
       const value = payload[0].value as number;
       const data = payload[0].payload as ChartData;
 
@@ -176,6 +180,7 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
               stroke="#3B82F6"
               strokeWidth={2}
               dot={false}
+              connectNulls={false}
             />
           </LineChart>
         </ResponsiveContainer>

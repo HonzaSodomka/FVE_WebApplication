@@ -11,6 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
+  TooltipProps,
 } from "recharts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
@@ -19,6 +20,13 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 interface ConsumptionData {
   hour: number;
   consumption_wh: number;
+}
+
+interface ChartData {
+  time: string;
+  consumption: number;
+  isLive: boolean;
+  hour: number;
 }
 
 interface ChartProps {
@@ -31,11 +39,10 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
   const [error, setError] = useState<string | null>(null);
   const [currentHour, setCurrentHour] = useState<number>(new Date().getHours());
 
-  // Efekt pro aktualizaci currentHour každou minutu
   useEffect(() => {
     const interval = setInterval(() => {
       setCurrentHour(new Date().getHours());
-    }, 60000); // Každou minutu
+    }, 60000);
 
     return () => clearInterval(interval);
   }, []);
@@ -65,20 +72,42 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
 
     fetchData();
 
-    // Pro aktuální den nastavíme interval pro pravidelné načítání dat
     if (isToday(date)) {
-      const interval = setInterval(fetchData, 60000); // Každou minutu
+      const interval = setInterval(fetchData, 60000);
       return () => clearInterval(interval);
     }
   }, [houseId, date]);
 
-  // Zpracování dat pro graf
-  const chartData = data.map((item) => ({
+  const chartData: ChartData[] = data.map((item) => ({
     time: `${String(item.hour).padStart(2, "0")}:00`,
     consumption: item.consumption_wh,
     isLive: isToday(date) && item.hour === currentHour,
     hour: item.hour,
   }));
+
+  const CustomTooltip = ({
+    active,
+    payload,
+    label,
+  }: TooltipProps<number, string>) => {
+    if (active && payload && payload.length > 0) {
+      const data = payload[0].payload as ChartData;
+      const value = payload[0].value as number;
+
+      return (
+        <div className="bg-white p-3 border rounded-lg shadow">
+          <p className="font-bold">{label}</p>
+          <p>
+            Spotřeba: {value.toFixed(2)} Wh
+            {data.isLive && (
+              <span className="ml-2 text-green-600">(Live)</span>
+            )}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  };
 
   if (error) {
     return (
@@ -151,26 +180,7 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
                 }}
               />
             )}
-            <Tooltip
-              content={({ active, payload, label }) => {
-                if (active && payload && payload.length) {
-                  const data = payload[0].payload;
-                  return (
-                    <div className="bg-white p-3 border rounded-lg shadow">
-                      <p className="font-bold">{label}</p>
-                      <p>
-                        Spotřeba: {payload[0].value?.toFixed(2)} Wh
-                        {data.isLive && (
-                          <span className="ml-2 text-green-600">(Live)</span>
-                        )}
-                      </p>
-                    </div>
-                  );
-                }
-                return null;
-              }}
-            />
-            {/* Historická data */}
+            <Tooltip content={CustomTooltip} />
             <Line
               type="monotone"
               dataKey="consumption"

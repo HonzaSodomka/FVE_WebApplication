@@ -74,19 +74,19 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
 
   // Vytvořit pole všech hodin (1-24) a naplnit daty nebo null pro budoucí hodiny
   const chartData: ChartData[] = Array.from({ length: 24 }, (_, index) => {
-    const hour = index + 1; // Hodiny 1-24 místo 0-23
-    const dataHour = index; // Index pro data (0-23)
+    const displayHour = index + 1;  // Hodiny pro zobrazení (1-24)
+    const dataHour = index;  // Odpovídající hodina v datech (0-23)
     const hourData = data.find(item => item.hour === dataHour);
     
     const isCurrentDay = isToday(date);
-    const currentHour = serverTime ? serverTime.getHours() + 1 : 24; // Posun o 1 pro zobrazení
-    const isFutureHour = isCurrentDay && hour > currentHour;
+    const currentDisplayHour = serverTime ? serverTime.getHours() + 1 : 24;
+    const isFutureHour = isCurrentDay && displayHour > currentDisplayHour;
 
     return {
-      time: `${String(hour).padStart(2, "0")}:00`,
+      time: `${String(displayHour).padStart(2, "0")}:00`,
       consumption: isFutureHour ? null : (hourData?.consumption_wh || 0),
-      isLive: serverTime ? hour === currentHour : false,
-      hour,
+      isLive: serverTime ? displayHour === currentDisplayHour : false,
+      hour: displayHour,
     };
   });
 
@@ -99,9 +99,14 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
       const value = payload[0].value as number;
       const data = payload[0].payload as ChartData;
 
+      // Výpočet časového rozsahu pro tooltip
+      const startHour = data.hour - 1;
+      const endHour = data.hour;
+      const timeRange = `${String(startHour).padStart(2, "0")}:00 - ${String(endHour).padStart(2, "0")}:00`;
+
       return (
         <div className="bg-white p-3 border rounded-lg shadow">
-          <p className="font-bold">{label}</p>
+          <p className="font-bold">{timeRange}</p>
           <p>
             Spotřeba: {value.toFixed(2)} Wh
             {data.isLive && (

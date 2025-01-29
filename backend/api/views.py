@@ -402,7 +402,6 @@ def consumption_data(request, house_id):
         logger.warning(f"Attempted to access consumption for non-existent house with ID {house_id}")
         return JsonResponse({'error': 'Dům nenalezen'}, status=404)
         
-    # GET - vrátí spotřebu agregovanou po hodinách
     if request.method == "GET":
         try:
             date_str = request.GET.get('date')
@@ -422,20 +421,16 @@ def consumption_data(request, house_id):
             
             # Zpracování dat po minutách do hodinových součtů
             for record in consumption:
-                # Získání hodiny z času (např. z "14:30" získá "14")
                 hour = int(record.time.split(':')[0])
                 
-                # Inicializace pokud hodina ještě neexistuje
                 if hour not in hourly_consumption:
                     hourly_consumption[hour] = 0
                 
-                # Sečtení spotřeby všech spotřebičů za danou minutu
                 minute_consumption = sum(
                     item['consumption_w'] 
                     for item in record.appliance_consumption
                 )
                 
-                # Přičtení k hodinové spotřebě (převod z W/min na Wh)
                 hourly_consumption[hour] += minute_consumption / 60
             
             # Formátování výstupu
@@ -444,22 +439,14 @@ def consumption_data(request, house_id):
                 'consumption_wh': round(consumption_wh, 2)
             } for hour, consumption_wh in sorted(hourly_consumption.items())]
             
-            # Doplnění chybějících hodin nulovou spotřebou
-            all_hours = set(range(24))
-            existing_hours = {record['hour'] for record in data}
-            missing_hours = all_hours - existing_hours
-            
-            for hour in missing_hours:
-                data.append({
-                    'hour': hour,
-                    'consumption_wh': 0
-                })
-            
-            # Seřazení podle hodin
-            data.sort(key=lambda x: x['hour'])
+            # Přidání aktuálního času serveru
+            current_time = datetime.now()
             
             logger.info(f"Successfully returned hourly consumption for house {house_id} on {date}")
-            return JsonResponse({'consumption': data})
+            return JsonResponse({
+                'consumption': data,
+                'current_time': current_time.isoformat()
+            })
             
         except ValueError:
             logger.error(f"Invalid date format received: {date_str}")
@@ -468,7 +455,7 @@ def consumption_data(request, house_id):
             logger.error(f"Error fetching consumption: {str(e)}")
             return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
             
-    # POST - uloží simulovanou spotřebu (beze změny)
+    # POST - zůstává beze změny pro ukládání minutových dat
     elif request.method == "POST":
         try:
             data = json.loads(request.body)

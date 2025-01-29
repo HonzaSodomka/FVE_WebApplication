@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { format, isToday } from "date-fns";
+import { format, isToday, parseISO } from "date-fns";
 import {
   LineChart,
   Line,
@@ -10,7 +10,6 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  ReferenceLine,
   TooltipProps,
 } from "recharts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -37,15 +36,7 @@ interface ChartProps {
 export default function ConsumptionChart({ houseId, date }: ChartProps) {
   const [data, setData] = useState<ConsumptionData[]>([]);
   const [error, setError] = useState<string | null>(null);
-  const [currentHour, setCurrentHour] = useState<number>(new Date().getHours());
-
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentHour(new Date().getHours());
-    }, 60000);
-
-    return () => clearInterval(interval);
-  }, []);
+  const [serverTime, setServerTime] = useState<Date | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -63,6 +54,9 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
         }
 
         const jsonData = await response.json();
+        if (jsonData.current_time) {
+          setServerTime(parseISO(jsonData.current_time));
+        }
         setData(jsonData.consumption);
       } catch (err) {
         setError("Nepodařilo se načíst data o spotřebě");
@@ -73,17 +67,24 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
     fetchData();
 
     if (isToday(date)) {
-      const interval = setInterval(fetchData, 60000);
+      const interval = setInterval(fetchData, 60000); // Aktualizace každou minutu
       return () => clearInterval(interval);
     }
   }, [houseId, date]);
 
-  const chartData: ChartData[] = data.map((item) => ({
-    time: `${String(item.hour).padStart(2, "0")}:00`,
-    consumption: item.consumption_wh,
-    isLive: isToday(date) && item.hour === currentHour,
-    hour: item.hour,
-  }));
+  const chartData: ChartData[] = data
+    .filter(item => {
+      if (!isToday(date)) return true;
+      if (!serverTime) return true;
+      return item.hour <= serverTime.getHours();
+    })
+    .map((item) => ({
+      time: `${String(item.hour).padStart(2, "0")}:00`,
+      consumption: item.consumption_wh,
+      isLive: serverTime ? item.hour === serverTime.getHours() : false,
+      hour: item.hour,
+    }))
+    .sort((a, b) => a.hour - b.hour);
 
   const CustomTooltip = ({
     active,
@@ -91,8 +92,8 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
     label,
   }: TooltipProps<number, string>) => {
     if (active && payload && payload.length > 0) {
-      const data = payload[0].payload as ChartData;
       const value = payload[0].value as number;
+      const data = payload[0].payload as ChartData;
 
       return (
         <div className="bg-white p-3 border rounded-lg shadow">
@@ -136,7 +137,7 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
             />
           </svg>
           Spotřeba elektřiny
-          {isToday(date) && (
+          {isToday(date) && serverTime && (
             <span className="ml-2 text-sm bg-green-100 text-green-800 px-2 py-1 rounded-full">
               Live
             </span>
@@ -168,18 +169,6 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
                 style: { fill: "#6B7280" },
               }}
             />
-            {isToday(date) && (
-              <ReferenceLine
-                x={`${String(currentHour).padStart(2, "0")}:00`}
-                stroke="#10B981"
-                strokeDasharray="3 3"
-                label={{
-                  value: "Aktuální čas",
-                  position: "top",
-                  fill: "#10B981",
-                }}
-              />
-            )}
             <Tooltip content={CustomTooltip} />
             <Line
               type="monotone"

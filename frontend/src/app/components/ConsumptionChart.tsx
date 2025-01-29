@@ -93,7 +93,6 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
   const CustomTooltip = ({
     active,
     payload,
-    label,
   }: TooltipProps<number, string>) => {
     if (active && payload && payload.length > 0 && payload[0].value !== null) {
       const value = payload[0].value as number;

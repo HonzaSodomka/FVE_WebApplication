@@ -10,4 +10,5 @@ urlpatterns = [
     path('auth/verify/', auth.verify_password, name='verify_password'),
     path('auth/check/', auth.check_access, name='check_access'),
     path('houses/<int:house_id>/consumption/', views.consumption_data, name='consumption_data'),
+    path('houses/<int:house_id>/toggle_simulation/', views.toggle_simulation, name='toggle_simulation'),
 ]

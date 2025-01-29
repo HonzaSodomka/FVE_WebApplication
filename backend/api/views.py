@@ -216,7 +216,7 @@ def house_appliances(request, house_id):
     if request.method == "GET":
         try:
             appliances = list(house.appliances.values(
-                'id', 'name', 'power_consumption', 'appliance_type',
+                'id', 'name', 'power_consumption', 'standby_power', 'appliance_type',
                 'run_duration_min', 'run_duration_max',
                 'pause_duration_min', 'pause_duration_max',
                 'usage_duration_min', 'usage_duration_max',
@@ -242,10 +242,14 @@ def house_appliances(request, house_id):
                 'power_consumption': data['power_consumption'],
                 'appliance_type': data['appliance_type']
             }
-            
+
+            # Zpracování standby_power podle typu spotřebiče
             if data['appliance_type'] == 'CYCLIC':
+                if 'standby_power' not in data:
+                    return JsonResponse({'error': 'Pro cyklické spotřebiče je povinné vyplnit spotřebu v pohotovostním režimu'}, status=400)
                 appliance = Appliance.objects.create(
                     **appliance_data,
+                    standby_power=data['standby_power'],
                     run_duration_min=data['run_duration_min'],
                     run_duration_max=data['run_duration_max'],
                     pause_duration_min=data['pause_duration_min'],
@@ -254,6 +258,7 @@ def house_appliances(request, house_id):
             elif data['appliance_type'] == 'SCHEDULED':
                 appliance = Appliance.objects.create(
                     **appliance_data,
+                    standby_power=data.get('standby_power', 0),
                     usage_duration_min=data['usage_duration_min'],
                     usage_duration_max=data['usage_duration_max'],
                     weekday_hours=data.get('weekday_hours', None),
@@ -262,6 +267,7 @@ def house_appliances(request, house_id):
             elif data['appliance_type'] == 'ON_DEMAND':
                 appliance = Appliance.objects.create(
                     **appliance_data,
+                    standby_power=data.get('standby_power', 0),
                     usage_duration_min=data['usage_duration_min'],
                     usage_duration_max=data['usage_duration_max'],
                     weekday_hours=data.get('weekday_hours', None),
@@ -281,6 +287,7 @@ def house_appliances(request, house_id):
                 'id': appliance.id,
                 'name': appliance.name,
                 'power_consumption': appliance.power_consumption,
+                'standby_power': appliance.standby_power,
                 'appliance_type': appliance.appliance_type,
                 'run_duration_min': appliance.run_duration_min,
                 'run_duration_max': appliance.run_duration_max,
@@ -342,7 +349,13 @@ def house_appliances(request, house_id):
             if 'appliance_type' in data:
                 appliance.appliance_type = data['appliance_type']
 
+            # Nastavení standby_power podle typu spotřebiče
             if appliance.appliance_type == 'CYCLIC':
+                if 'standby_power' in data:
+                    appliance.standby_power = data['standby_power']
+                elif not appliance.standby_power:  # Pokud se mění typ na CYCLIC a není nastaven standby_power
+                    return JsonResponse({'error': 'Pro cyklické spotřebiče je povinné vyplnit spotřebu v pohotovostním režimu'}, status=400)
+                
                 if 'run_duration_min' in data:
                     appliance.run_duration_min = data['run_duration_min']
                 if 'run_duration_max' in data:
@@ -353,6 +366,11 @@ def house_appliances(request, house_id):
                     appliance.pause_duration_max = data['pause_duration_max']
                     
             elif appliance.appliance_type in ['SCHEDULED', 'ON_DEMAND']:
+                if 'standby_power' in data:
+                    appliance.standby_power = data['standby_power']
+                elif appliance.standby_power is None:  # Při změně typu nastavíme default 0
+                    appliance.standby_power = 0
+                    
                 if 'usage_duration_min' in data:
                     appliance.usage_duration_min = data['usage_duration_min']
                 if 'usage_duration_max' in data:
@@ -362,6 +380,9 @@ def house_appliances(request, house_id):
                 if 'weekend_hours' in data:
                     appliance.weekend_hours = data['weekend_hours']
             
+            elif appliance.appliance_type == 'CONSTANT':
+                appliance.standby_power = None
+            
             appliance.save()
             logger.info(f"Successfully updated appliance {appliance_id}")
             
@@ -369,6 +390,7 @@ def house_appliances(request, house_id):
                 'id': appliance.id,
                 'name': appliance.name,
                 'power_consumption': appliance.power_consumption,
+                'standby_power': appliance.standby_power,
                 'appliance_type': appliance.appliance_type,
                 'run_duration_min': appliance.run_duration_min,
                 'run_duration_max': appliance.run_duration_max,

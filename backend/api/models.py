@@ -57,6 +57,12 @@ class Appliance(models.Model):
     )
     name = models.CharField(max_length=100, verbose_name="Název spotřebiče")
     power_consumption = models.IntegerField(verbose_name="Spotřeba (W)")
+    standby_power = models.IntegerField(
+        null=True, 
+        blank=True,
+        verbose_name="Spotřeba v pohotovostním režimu (W)",
+        help_text="Povinné pro cyklické spotřebiče, volitelné pro plánované a na vyžádání"
+    )
     
     APPLIANCE_TYPES = [
         ('CONSTANT', 'Konstantní spotřeba'),      # např. router
@@ -132,8 +138,15 @@ class Appliance(models.Model):
     )
 
     def save(self, *args, **kwargs):
+        from django.core.exceptions import ValidationError
+        
+        # Validace standby_power podle typu spotřebiče
+        if self.appliance_type == 'CYCLIC' and not self.standby_power:
+            raise ValidationError('Pro cyklické spotřebiče je povinné vyplnit spotřebu v pohotovostním režimu')
+        
         # Nastavení defaultních hodnot podle typu spotřebiče
         if self.appliance_type == 'CONSTANT':
+            self.standby_power = None
             self.in_standby = None
             self.remaining_minutes = None
             self.is_active = None

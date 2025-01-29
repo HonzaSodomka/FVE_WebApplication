@@ -67,12 +67,13 @@ def simulate_minute_consumption():
         is_weekend = current_time.weekday() >= 5
         logger.info(f"Simuluji pro čas: {current_date} {current_time_str} ({'víkend' if is_weekend else 'pracovní den'})")
         
-        # Upravený dotaz - přidáno WHERE h.is_active = true
+        # Přidáno standby_power do SELECT
         cur.execute("""
             SELECT 
                 h.id as house_id,
                 a.id as appliance_id,
                 a.power_consumption,
+                a.standby_power,
                 a.appliance_type,
                 a.is_active,
                 a.in_standby,
@@ -90,14 +91,14 @@ def simulate_minute_consumption():
                 a.planned_starts
             FROM api_house h
             JOIN api_appliance a ON h.id = a.house_id
-            WHERE h.is_active = true  -- Přidaná podmínka
+            WHERE h.is_active = true
         """)
         rows = cur.fetchall()
         logger.info(f"Nalezeno {len(rows)} spotřebičů")
         
         houses = {}
-        for (house_id, appliance_id, power, app_type, is_active, in_standby, 
-             remaining_minutes, run_duration_min, run_duration_max, 
+        for (house_id, appliance_id, power, standby_power, app_type, is_active, 
+             in_standby, remaining_minutes, run_duration_min, run_duration_max, 
              pause_duration_min, pause_duration_max, next_start_time,
              usage_duration_min, usage_duration_max, weekday_hours, weekend_hours,
              remaining_minutes_list, planned_starts) in rows:
@@ -154,7 +155,8 @@ def simulate_minute_consumption():
                     variation = random.uniform(0.9, 1.0)
                     minute_consumption = (power * variation) / 60
                 else:
-                    minute_consumption = (power * 0.1) / 60
+                    # Použití standby_power místo procenta z aktivní spotřeby
+                    minute_consumption = standby_power / 60
                 logger.debug(f"Spotřebič {appliance_id} (CYCLIC): {minute_consumption}W/min (Active: {is_active})")
                 
                 if remaining_minutes > 0:
@@ -175,7 +177,10 @@ def simulate_minute_consumption():
                         WHERE id = %s
                     """, [appliance_id])
                 else:
-                    minute_consumption = 0
+                    # V nečinnosti používáme standby_power (defaultně 0)
+                    minute_consumption = standby_power / 60 if standby_power else 0
+                    logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): {minute_consumption}W/min (Standby)")
+
                     if next_start_time and current_time.replace(tzinfo=None) == next_start_time.replace(tzinfo=None):
                         duration = random.randint(usage_duration_min, usage_duration_max)
                         cur.execute("""

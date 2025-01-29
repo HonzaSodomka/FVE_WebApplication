@@ -492,3 +492,32 @@ def consumption_data(request, house_id):
         except Exception as e:
             logger.error(f"Error saving consumption: {str(e)}")
             return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def toggle_simulation(request, house_id):
+    try:
+        house = House.objects.get(id=house_id)
+        
+        data = json.loads(request.body)
+        is_active = data.get('is_active')
+        
+        if is_active is None:
+            return JsonResponse({'error': 'Chybí parametr is_active'}, status=400)
+            
+        house.is_active = is_active
+        house.save()
+        
+        logger.info(f"Simulace pro dům {house.id} byla {'spuštěna' if is_active else 'zastavena'}")
+        
+        return JsonResponse({
+            'id': house.id,
+            'name': house.name,
+            'is_active': house.is_active
+        })
+        
+    except House.DoesNotExist:
+        return JsonResponse({'error': 'Dům nenalezen'}, status=404)
+    except Exception as e:
+        logger.error(f"Error toggling simulation: {str(e)}")
+        return JsonResponse({'error': 'Interní chyba serveru'}, status=500)

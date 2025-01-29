@@ -67,6 +67,7 @@ def simulate_minute_consumption():
         is_weekend = current_time.weekday() >= 5
         logger.info(f"Simuluji pro čas: {current_date} {current_time_str} ({'víkend' if is_weekend else 'pracovní den'})")
         
+        # Upravený dotaz - přidáno WHERE h.is_active = true
         cur.execute("""
             SELECT 
                 h.id as house_id,
@@ -89,6 +90,7 @@ def simulate_minute_consumption():
                 a.planned_starts
             FROM api_house h
             JOIN api_appliance a ON h.id = a.house_id
+            WHERE h.is_active = true  -- Přidaná podmínka
         """)
         rows = cur.fetchall()
         logger.info(f"Nalezeno {len(rows)} spotřebičů")

@@ -36,6 +36,7 @@ class House(models.Model):
     name = models.CharField(max_length=100, verbose_name="Název domu")
     solar_power = models.FloatField(verbose_name="Výkon solárních panelů (kWp)")
     battery_capacity = models.FloatField(verbose_name="Kapacita baterie (kWh)")
+    is_active = models.BooleanField(default=False, verbose_name="Aktivní simulace")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
@@ -45,7 +46,7 @@ class House(models.Model):
     class Meta:
         verbose_name = "Dům"
         verbose_name_plural = "Domy"
-
+        
 class Appliance(models.Model):
     # Základní pole
     house = models.ForeignKey(

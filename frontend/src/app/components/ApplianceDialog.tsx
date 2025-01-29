@@ -165,9 +165,6 @@ export default function ApplianceDialog({
           name: formData.name,
           power_consumption: parseInt(formData.power_consumption),
           appliance_type: formData.appliance_type,
-          ...(formData.standby_power && {
-            standby_power: parseInt(formData.standby_power),
-          }),
           ...(formData.appliance_type === "CYCLIC" && {
             standby_power: parseInt(formData.standby_power), // Povinné pro CYCLIC
             run_duration_min: parseInt(formData.run_duration_min),
@@ -222,7 +219,13 @@ export default function ApplianceDialog({
   };
 
   const renderStandbyPowerInput = () => {
-    if (formData.appliance_type === "CONSTANT") return null;
+    // Zobrazit jen pro CYCLIC a SCHEDULED
+    if (
+      !formData.appliance_type ||
+      formData.appliance_type === "CONSTANT" ||
+      formData.appliance_type === "ON_DEMAND"
+    )
+      return null;
 
     const isRequired = formData.appliance_type === "CYCLIC";
 

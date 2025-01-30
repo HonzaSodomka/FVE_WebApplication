@@ -453,7 +453,7 @@ def consumption_data(request, house_id):
                     for item in record.appliance_consumption
                 )
                 
-                hourly_consumption[hour] += minute_consumption / 60
+                hourly_consumption[hour] += minute_consumption
             
             # Formátování výstupu
             data = [{

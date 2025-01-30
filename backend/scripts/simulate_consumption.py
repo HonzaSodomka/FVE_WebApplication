@@ -30,18 +30,17 @@ def get_adjusted_duration(min_duration, max_duration, is_peak_time, for_active_s
     """
     Upraví délku běhu/standby podle toho, zda je špička a podle typu stavu
     """
-    range_size = max_duration - min_duration
-    half_range = range_size // 2
-    
     if is_peak_time:
         if for_active_state:
             # Ve špičce prodloužíme aktivní běh - použijeme horní polovinu rozsahu
+            range_size = max_duration - min_duration
+            half_range = range_size // 2
             adjusted_min = min_duration + half_range
             adjusted_max = max_duration
         else:
-            # Ve špičce zkrátíme standby - použijeme dolní polovinu rozsahu
-            adjusted_min = min_duration
-            adjusted_max = min_duration + half_range
+            # Ve špičce zkrátíme standby NA POLOVINU
+            adjusted_min = min_duration // 2
+            adjusted_max = max_duration // 2
     else:
         # Mimo špičku použijeme celý rozsah
         adjusted_min = min_duration

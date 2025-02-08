@@ -440,6 +440,7 @@ def consumption_data(request, house_id):
             
             # Slovník pro ukládání hodinové spotřeby
             hourly_consumption = {}
+            daily_total = 0  # Celková denní spotřeba
             
             # Zpracování dat po minutách do hodinových součtů
             for record in consumption:
@@ -455,18 +456,23 @@ def consumption_data(request, house_id):
                 
                 hourly_consumption[hour] += minute_consumption
             
-            # Formátování výstupu
-            data = [{
-                'hour': hour,
-                'consumption_wh': round(consumption_wh, 2)
-            } for hour, consumption_wh in sorted(hourly_consumption.items())]
+            # Formátování výstupu a výpočet denního součtu
+            data = []
+            for hour, consumption_wh in sorted(hourly_consumption.items()):
+                hourly_wh = round(consumption_wh, 2)
+                data.append({
+                    'hour': hour,
+                    'consumption_wh': hourly_wh
+                })
+                daily_total += hourly_wh
             
             # Přidání aktuálního času serveru
             current_time = datetime.now()
             
-            logger.info(f"Successfully returned hourly consumption for house {house_id} on {date}")
+            logger.info(f"Successfully returned hourly consumption for house {house_id} on {date} (total: {daily_total:.2f} Wh)")
             return JsonResponse({
                 'consumption': data,
+                'daily_total': round(daily_total, 2),
                 'current_time': current_time.isoformat()
             })
             

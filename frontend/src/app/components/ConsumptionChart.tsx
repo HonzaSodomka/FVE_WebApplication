@@ -37,6 +37,7 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
   const [data, setData] = useState<ConsumptionData[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [serverTime, setServerTime] = useState<Date | null>(null);
+  const [dailyTotal, setDailyTotal] = useState<number>(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -58,6 +59,7 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
           setServerTime(parseISO(jsonData.current_time));
         }
         setData(jsonData.consumption);
+        setDailyTotal(jsonData.daily_total || 0);
       } catch (err) {
         setError("Nepodařilo se načíst data o spotřebě");
         console.error(err);
@@ -72,10 +74,9 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
     }
   }, [houseId, date]);
 
-  // Vytvořit pole všech hodin (1-24) a naplnit daty nebo null pro budoucí hodiny
   const chartData: ChartData[] = Array.from({ length: 24 }, (_, index) => {
-    const displayHour = index + 1;  // Hodiny pro zobrazení (1-24)
-    const dataHour = index;  // Odpovídající hodina v datech (0-23)
+    const displayHour = index + 1;
+    const dataHour = index;
     const hourData = data.find(item => item.hour === dataHour);
     
     const isCurrentDay = isToday(date);
@@ -98,7 +99,6 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
       const value = payload[0].value as number;
       const data = payload[0].payload as ChartData;
 
-      // Výpočet časového rozsahu pro tooltip
       const startHour = data.hour - 1;
       const timeRange = `${String(startHour).padStart(2, "0")}:00 - ${String(startHour).padStart(2, "0")}:59`;
 
@@ -153,6 +153,14 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
         <span className="text-sm font-medium text-gray-600 bg-gray-100 px-3 py-1 rounded-full">
           {format(date, "dd. MM. yyyy")}
         </span>
+      </div>
+
+      {/* Box s celkovou denní spotřebou */}
+      <div className="text-center mb-4">
+        <p className="text-sm text-gray-500">Celková denní spotřeba</p>
+        <p className="text-xl font-bold text-blue-600">
+          {dailyTotal.toFixed(2)} Wh
+        </p>
       </div>
 
       <div className="h-80 w-full">

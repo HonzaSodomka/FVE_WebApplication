@@ -130,17 +130,40 @@ def houses(request):
         try:
             data = json.loads(request.body)
             logger.info(f"Received request to create house: {data}")
+            
+            required_fields = ['name', 'solar_power', 'battery_capacity', 'max_charging_power', 'max_discharging_power']
+            for field in required_fields:
+                if field not in data:
+                    raise KeyError(field)
+            
             house = House.objects.create(
                 name=data['name'],
                 solar_power=data['solar_power'],
-                battery_capacity=data['battery_capacity']
+                battery_capacity=data['battery_capacity'],
+                max_charging_power=data['max_charging_power'],
+                max_discharging_power=data['max_discharging_power'],
+                # Volitelná pole s výchozími hodnotami
+                current_battery_level=data.get('current_battery_level', 0),
+                min_battery_level=data.get('min_battery_level', 10),
+                charging_efficiency=data.get('charging_efficiency', 90),
+                discharging_efficiency=data.get('discharging_efficiency', 90),
+                risk_level=data.get('risk_level', 'MEDIUM')
             )
+            
             logger.info(f"Successfully created house with ID {house.id}")
             return JsonResponse({
                 'id': house.id,
                 'name': house.name,
                 'solar_power': house.solar_power,
-                'battery_capacity': house.battery_capacity
+                'battery_capacity': house.battery_capacity,
+                'current_battery_level': house.current_battery_level,
+                'min_battery_level': house.min_battery_level,
+                'max_charging_power': house.max_charging_power,
+                'max_discharging_power': house.max_discharging_power,
+                'charging_efficiency': house.charging_efficiency,
+                'discharging_efficiency': house.discharging_efficiency,
+                'risk_level': house.risk_level,
+                'is_active': house.is_active
             }, status=201)
         except KeyError as e:
             logger.error(f"Missing field in house creation request: {str(e)}")
@@ -180,12 +203,15 @@ def houses(request):
             data = json.loads(request.body)
             logger.info(f"Received request to update house {house_id}: {data}")
             
-            if 'name' in data:
-                house.name = data['name']
-            if 'solar_power' in data:
-                house.solar_power = data['solar_power']
-            if 'battery_capacity' in data:
-                house.battery_capacity = data['battery_capacity']
+            updatable_fields = [
+                'name', 'solar_power', 'battery_capacity', 'current_battery_level',
+                'min_battery_level', 'max_charging_power', 'max_discharging_power',
+                'charging_efficiency', 'discharging_efficiency', 'risk_level'
+            ]
+            
+            for field in updatable_fields:
+                if field in data:
+                    setattr(house, field, data[field])
             
             house.save()
             logger.info(f"Successfully updated house {house_id}")
@@ -194,7 +220,15 @@ def houses(request):
                 'id': house.id,
                 'name': house.name,
                 'solar_power': house.solar_power,
-                'battery_capacity': house.battery_capacity
+                'battery_capacity': house.battery_capacity,
+                'current_battery_level': house.current_battery_level,
+                'min_battery_level': house.min_battery_level,
+                'max_charging_power': house.max_charging_power,
+                'max_discharging_power': house.max_discharging_power,
+                'charging_efficiency': house.charging_efficiency,
+                'discharging_efficiency': house.discharging_efficiency,
+                'risk_level': house.risk_level,
+                'is_active': house.is_active
             })
             
         except House.DoesNotExist:

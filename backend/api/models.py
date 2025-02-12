@@ -33,12 +33,61 @@ class SolarData(models.Model):
         return f"{self.timestamp}: {self.watt_hours_period} Wh"
     
 class House(models.Model):
+    # Risk level pro nabíjení
+    RISK_LEVELS = [
+        ('LOW', 'Nízké riziko'),      # Jistota energie za cenu vyšších nákladů
+        ('MEDIUM', 'Střední riziko'),  # Vyvážený přístup
+        ('HIGH', 'Vysoké riziko'),     # Agresivní optimalizace ceny s rizikem drahého dobíjení
+    ]
+
+    # Základní informace
     name = models.CharField(max_length=100, verbose_name="Název domu")
     solar_power = models.FloatField(verbose_name="Výkon solárních panelů (kWp)")
     battery_capacity = models.FloatField(verbose_name="Kapacita baterie (kWh)")
     is_active = models.BooleanField(default=False, verbose_name="Aktivní simulace")
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
+    
+    # Parametry baterie
+    current_battery_level = models.FloatField(
+        default=0,
+        verbose_name="Aktuální stav baterie (kWh)"
+    )
+    min_battery_level = models.FloatField(
+        default=10,
+        verbose_name="Minimální povolená úroveň baterie (%)"
+    )
+    max_charging_power = models.FloatField(
+        default=0,  # Přidáno default=0
+        verbose_name="Maximální nabíjecí výkon (kW)",
+        help_text="Jak rychle lze baterii nabíjet"
+    )
+    max_discharging_power = models.FloatField(
+        default=0,  # Přidáno default=0
+        verbose_name="Maximální vybíjecí výkon (kW)",
+        help_text="Jak rychle lze baterii vybíjet"
+    )
+    charging_efficiency = models.FloatField(
+        default=90,
+        verbose_name="Účinnost nabíjení (%)"
+    )
+    discharging_efficiency = models.FloatField(
+        default=90,
+        verbose_name="Účinnost vybíjení (%)"
+    )
+    
+    # Risk level
+    risk_level = models.CharField(
+        max_length=6,
+        choices=RISK_LEVELS,
+        default='MEDIUM',
+        verbose_name="Úroveň rizika",
+        help_text="""
+            NÍZKÉ: Nabíjí i za vyšší ceny pro zajištění dostatku energie
+            STŘEDNÍ: Vyvážený přístup mezi cenou a jistotou energie
+            VYSOKÉ: Riskantní optimalizace ceny, možnost nutnosti drahého dobíjení
+        """
+    )
     
     def __str__(self):
         return f"{self.name} ({self.solar_power} kWp, {self.battery_capacity} kWh)"

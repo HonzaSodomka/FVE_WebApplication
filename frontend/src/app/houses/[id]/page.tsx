@@ -204,7 +204,7 @@ export default function Page() {
                         Aktuální stav:
                       </span>
                       <span className="font-medium text-blue-900">
-                        {house.current_battery_level} kWh (
+                        {Number(house.current_battery_level).toFixed(2)} kWh (
                         {(
                           (house.current_battery_level /
                             house.battery_capacity) *

@@ -1,5 +1,3 @@
-"use client";
-
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
 import {
@@ -13,8 +11,8 @@ import {
   Area,
 } from "recharts";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Slider } from "@/components/ui/slider";
 
-// Interface pro Solar a Chart data
 interface SolarData {
   timestamp: string;
   watts: number;
@@ -34,21 +32,21 @@ export default function SolarDataChart({ date }: { date: Date }) {
   const [solarData, setSolarData] = useState<ChartData[]>([]);
   const [error, setError] = useState<string>("");
   const [dailyTotal, setDailyTotal] = useState<number>(0);
+  const [power, setPower] = useState<number>(10);
+  const [sliderValue, setSliderValue] = useState<number>(10);
 
   useEffect(() => {
-    // Změna datumu zase vyvolá formátování data a požadavek na api
     const fetchSolarData = async () => {
       try {
         const formattedDate = format(date, "yyyy-MM-dd");
         const response = await fetch(
-          `${API_URL}/api/solar_prediction/?date=${formattedDate}`,
+          `${API_URL}/api/solar_prediction/?date=${formattedDate}&power=${power}`,
           {
             credentials: "include"
           }
         );
         const data = await response.json();
 
-        // Kontrola response status kódu
         if (!response.ok) {
           setError(
             data.error ||
@@ -61,7 +59,6 @@ export default function SolarDataChart({ date }: { date: Date }) {
 
         setError("");
 
-        //Vytvoří nulové hodnoty pro všech 24h
         const processedData = Array(24)
           .fill(null)
           .map((_, index) => ({
@@ -70,7 +67,6 @@ export default function SolarDataChart({ date }: { date: Date }) {
             wattHoursPeriod: 0,
           }));
 
-        //Existující záznamy přepíší nulové hodnoty
         data.predictions.forEach((item: SolarData) => {
           const hour = new Date(item.timestamp).getHours();
           processedData[hour] = {
@@ -89,9 +85,8 @@ export default function SolarDataChart({ date }: { date: Date }) {
     };
 
     fetchSolarData();
-  }, [date]);
+  }, [date, power]);
 
-  // Konstanty pro barvy a styly
   const CHART_COLOR = {
     stroke: "rgba(16, 185, 129, 0.8)",
     fill: "rgba(16, 185, 129, 0.1)",
@@ -100,7 +95,6 @@ export default function SolarDataChart({ date }: { date: Date }) {
 
   return (
     <div className="space-y-6 bg-white p-6 rounded-xl shadow-lg border border-gray-200">
-      {/* Header s nadpisem a datem */}
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
           <svg
@@ -124,7 +118,38 @@ export default function SolarDataChart({ date }: { date: Date }) {
         </span>
       </div>
 
-      {/* Box s denní produkcí */}
+      <div className="bg-gray-50 p-4 rounded-lg border border-gray-100">
+        <div className="flex justify-between items-center mb-6">
+          <div className="space-y-1">
+            <label className="text-sm font-medium text-gray-700">
+              Instalovaný výkon
+            </label>
+            <p className="text-xs text-gray-500">
+              Nastavte požadovaný výkon FVE systému
+            </p>
+          </div>
+          <div className="px-3 py-1 bg-white rounded-lg border border-gray-200">
+            <span className="text-lg font-semibold text-green-600">{sliderValue}</span>
+            <span className="ml-1 text-sm text-gray-600">kWp</span>
+          </div>
+        </div>
+        <div className="px-2">
+          <Slider
+            value={[sliderValue]}
+            onValueChange={(value: number[]) => setSliderValue(value[0])}
+            onValueCommit={(value: number[]) => setPower(value[0])}
+            min={1}
+            max={50}
+            step={0.5}
+            className="w-full [&_[data-orientation=horizontal]]:h-0.8 [&_[data-orientation=horizontal]]:bg-gray-200 [&>[role=slider]]:h-3 [&>[role=slider]]:w-3 [&>[role=slider]]:bg-white [&>[role=slider]]:border [&>[role=slider]]:border-gray-400 [&>[role=slider]]:shadow-sm hover:[&>[role=slider]]:border-gray-500"
+          />
+        </div>
+        <div className="flex justify-between mt-2 px-2">
+          <span className="text-xs text-gray-500">1 kWp</span>
+          <span className="text-xs text-gray-500">50 kWp</span>
+        </div>
+      </div>
+
       <div className="text-center mb-4">
         <p className="text-sm text-gray-500">Celková denní produkce</p>
         <p className="text-xl font-bold text-green-600">
@@ -132,7 +157,6 @@ export default function SolarDataChart({ date }: { date: Date }) {
         </p>
       </div>
 
-      {/* Zobrazení chyby nebo grafu */}
       {error ? (
         <Alert
           variant="destructive"
@@ -180,7 +204,6 @@ export default function SolarDataChart({ date }: { date: Date }) {
                   return null;
                 }}
               />
-              {/* Area a Line pro vizuální efekt "vyplněné oblasti pod křivkou" */}
               <Area
                 type="monotone"
                 dataKey="wattHoursPeriod"
@@ -200,7 +223,6 @@ export default function SolarDataChart({ date }: { date: Date }) {
         </div>
       )}
 
-      {/* Informace o FVE systému - zobrazí se pouze když není error */}
       {!error && (
         <div className="mt-4 p-4 bg-gray-50 rounded-lg space-y-2 text-sm text-gray-600">
           <h3 className="font-semibold text-gray-700">
@@ -215,7 +237,6 @@ export default function SolarDataChart({ date }: { date: Date }) {
             <div>
               <p>Sklon panelů: 30°</p>
               <p>Azimut: 0° (orientace na jih)</p>
-              <p>Instalovaný výkon: 20 kWp</p>
             </div>
           </div>
         </div>

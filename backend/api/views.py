@@ -56,61 +56,66 @@ def get_prices(request):
        )
     
 def get_solar_prediction(request):
-   date_str = request.GET.get('date')
-   logger.info(f"Received get_solar_prediction request for {date_str}")
+    date_str = request.GET.get('date')
+    # Získáme power parametr s výchozí hodnotou 10
+    power = float(request.GET.get('power', 10))
+    logger.info(f"Received get_solar_prediction request for {date_str} with power {power}kWp")
    
-   try:
-       # Převod datumu z formátu YYYY-MM-DD
-       date = datetime.strptime(date_str, '%Y-%m-%d').date()
-       logger.debug(f"Successfully parsed date {date}")
-       
-       # Získání dat pro daný den
-       solar_data = SolarData.objects.filter(
-           timestamp__date=date
-       ).order_by('timestamp')
-       
-       # Kontrola jestli existují data
-       if not solar_data.exists():
-           logger.warning(f"No solar data found for date {date}")
-           return JsonResponse(
-               {'error': 'No data available for this date'}, 
-               status=404
-           )
-       
-       # Příprava dat pro JSON
-       data = [{
-           'timestamp': solar.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
-           'watts': solar.watts,
-           'watt_hours_period': solar.watt_hours_period,
-           'watt_hours_cumulative': solar.watt_hours_cumulative,
-           'hour': solar.timestamp.hour  # Přidáno pro kompatibilitu s frontend
-       } for solar in solar_data]
-       
-       # Přidání denního součtu
-       daily_total = solar_data.last().watt_hours_cumulative if solar_data.exists() else 0
-       
-       response = {
-           'predictions': data,
-           'daily_total': daily_total
-       }
-       
-       logger.info(f"Successfully returned {len(data)} solar predictions for {date} with daily total {daily_total}Wh")
-       return JsonResponse(response)
-       
-   except ValueError as e:
-       # Chyba při parsování data
-       logger.error(f"Invalid date format: {date_str}")
-       return JsonResponse({
-           'error': 'Invalid date format. Use YYYY-MM-DD',
-           'detail': str(e)
-       }, status=400)
-   except Exception as e:
-       # Neočekávané chyby
-       logger.error(f"Unexpected error when getting solar predictions for {date_str}: {str(e)}")
-       return JsonResponse({
-           'error': 'Internal server error',
-           'detail': str(e)
-       }, status=500)
+    try:
+        date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        logger.debug(f"Successfully parsed date {date}")
+        
+        solar_data = SolarData.objects.filter(
+            timestamp__date=date
+        ).order_by('timestamp')
+        
+        if not solar_data.exists():
+            logger.warning(f"No solar data found for date {date}")
+            return JsonResponse(
+                {'error': 'No data available for this date'}, 
+                status=404
+            )
+        
+        # Přepočítáme hodnoty - nejdřív vydělíme 20 (původní výkon) a pak vynásobíme požadovaným výkonem
+        power_ratio = power / 20
+        data = [{
+            'timestamp': solar.timestamp.strftime('%Y-%m-%d %H:%M:%S'),
+            'watts': solar.watts * power_ratio,
+            'watt_hours_period': solar.watt_hours_period * power_ratio,
+            'watt_hours_cumulative': solar.watt_hours_cumulative * power_ratio,
+            'hour': solar.timestamp.hour
+        } for solar in solar_data]
+        
+        # Přepočítáme i denní součet
+        daily_total = (solar_data.last().watt_hours_cumulative * power_ratio) if solar_data.exists() else 0
+        
+        response = {
+            'predictions': data,
+            'daily_total': daily_total
+        }
+        
+        logger.info(f"Successfully returned {len(data)} solar predictions for {date} with power {power}kWp (daily total: {daily_total}Wh)")
+        return JsonResponse(response)
+        
+    except ValueError as e:
+        if 'power' in str(e):
+            logger.error(f"Invalid power value: {request.GET.get('power')}")
+            return JsonResponse({
+                'error': 'Invalid power value. Must be a number.',
+                'detail': str(e)
+            }, status=400)
+        
+        logger.error(f"Invalid date format: {date_str}")
+        return JsonResponse({
+            'error': 'Invalid date format. Use YYYY-MM-DD',
+            'detail': str(e)
+        }, status=400)
+    except Exception as e:
+        logger.error(f"Unexpected error when getting solar predictions for {date_str}: {str(e)}")
+        return JsonResponse({
+            'error': 'Internal server error',
+            'detail': str(e)
+        }, status=500)
    
 @csrf_exempt
 @require_http_methods(["GET", "POST", "DELETE", "PATCH"])

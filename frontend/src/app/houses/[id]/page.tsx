@@ -226,12 +226,18 @@ export default function Page() {
                       ></div>
                     </div>
                     <div className="flex justify-between items-center text-sm text-blue-700">
-                      <span>Min: {house.min_battery_level}%</span>
-                      <span>Max: 100%</span>
+                      <span>
+                        Min:{" "}
+                        {(
+                          (house.min_battery_level / 100) *
+                          house.battery_capacity
+                        ).toFixed(1)}{" "}
+                        kWh
+                      </span>
+                      <span>Max: {house.battery_capacity.toFixed(1)} kWh</span>
                     </div>
                   </div>
                 </div>
-
                 {/* Výkonové parametry */}
                 <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-900">

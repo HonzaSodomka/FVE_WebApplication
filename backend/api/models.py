@@ -48,6 +48,12 @@ class House(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
+    # Solární variace
+    solar_variation = models.FloatField(
+        default=1,
+        verbose_name="Variace solární výroby"
+    )
+    
     # Parametry baterie
     current_battery_level = models.FloatField(
         default=0,

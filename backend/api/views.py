@@ -152,7 +152,8 @@ def houses(request):
                 min_battery_level=data.get('min_battery_level', 10),
                 charging_efficiency=data.get('charging_efficiency', 90),
                 discharging_efficiency=data.get('discharging_efficiency', 90),
-                risk_level=data.get('risk_level', 'MEDIUM')
+                risk_level=data.get('risk_level', 'MEDIUM'),
+                solar_variation=data.get('solar_variation', 1)
             )
             
             logger.info(f"Successfully created house with ID {house.id}")
@@ -168,7 +169,8 @@ def houses(request):
                 'charging_efficiency': house.charging_efficiency,
                 'discharging_efficiency': house.discharging_efficiency,
                 'risk_level': house.risk_level,
-                'is_active': house.is_active
+                'is_active': house.is_active,
+                'solar_variation': house.solar_variation
             }, status=201)
         except KeyError as e:
             logger.error(f"Missing field in house creation request: {str(e)}")
@@ -211,7 +213,8 @@ def houses(request):
             updatable_fields = [
                 'name', 'solar_power', 'battery_capacity', 'current_battery_level',
                 'min_battery_level', 'max_charging_power', 'max_discharging_power',
-                'charging_efficiency', 'discharging_efficiency', 'risk_level'
+                'charging_efficiency', 'discharging_efficiency', 'risk_level',
+                'solar_variation'
             ]
             
             for field in updatable_fields:
@@ -233,7 +236,8 @@ def houses(request):
                 'charging_efficiency': house.charging_efficiency,
                 'discharging_efficiency': house.discharging_efficiency,
                 'risk_level': house.risk_level,
-                'is_active': house.is_active
+                'is_active': house.is_active,
+                'solar_variation': house.solar_variation
             })
             
         except House.DoesNotExist:

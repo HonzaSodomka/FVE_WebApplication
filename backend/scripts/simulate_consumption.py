@@ -66,7 +66,7 @@ def simulate_minute_consumption():
         is_weekend = current_time.weekday() >= 5
         logger.info(f"Simuluji pro čas: {current_date} {current_time_str} ({'víkend' if is_weekend else 'pracovní den'})")
         
-        # Přidáno standby_power do SELECT
+        # Načteme spotřebiče aktivních domů
         cur.execute("""
             SELECT 
                 h.id as house_id,
@@ -95,15 +95,22 @@ def simulate_minute_consumption():
         rows = cur.fetchall()
         logger.info(f"Nalezeno {len(rows)} spotřebičů")
         
+        # Pro každý dům sledujeme seznam spotřebičů a celkovou spotřebu
         houses = {}
         for (house_id, appliance_id, power, standby_power, app_type, is_active, 
              in_standby, remaining_minutes, run_duration_min, run_duration_max, 
              pause_duration_min, pause_duration_max, next_start_time,
              usage_duration_min, usage_duration_max, weekday_hours, weekend_hours,
              remaining_minutes_list, planned_starts) in rows:
+            
+            # Vytvoříme nový záznam pro dům pokud neexistuje
             if house_id not in houses:
-                houses[house_id] = []
+                houses[house_id] = {
+                    'appliances': [],  # Seznam spotřebičů
+                    'total_wh': 0      # Celková spotřeba ve Wh
+                }
                 
+            # Spočítáme spotřebu pro každý typ spotřebiče
             if app_type == 'CONSTANT':
                 variation = random.uniform(0.9, 1.0)
                 minute_consumption = (power * variation) / 60
@@ -111,8 +118,7 @@ def simulate_minute_consumption():
                 
             elif app_type == 'CYCLIC':
                 if remaining_minutes == 0:
-                    current_time = datetime.now()
-                    peak_time = is_peak_time(current_time, current_time.weekday() >= 5)
+                    peak_time = is_peak_time(current_time, is_weekend)
                     
                     if in_standby:
                         new_remaining = get_adjusted_duration(
@@ -154,7 +160,6 @@ def simulate_minute_consumption():
                     variation = random.uniform(0.9, 1.0)
                     minute_consumption = (power * variation) / 60
                 else:
-                    # Použití standby_power místo procenta z aktivní spotřeby
                     minute_consumption = standby_power / 60
                 logger.debug(f"Spotřebič {appliance_id} (CYCLIC): {minute_consumption}W/min (Active: {is_active})")
                 
@@ -176,7 +181,6 @@ def simulate_minute_consumption():
                         WHERE id = %s
                     """, [appliance_id])
                 else:
-                    # V nečinnosti používáme standby_power (defaultně 0)
                     minute_consumption = standby_power / 60 if standby_power else 0
                     logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): {minute_consumption}W/min (Standby)")
 
@@ -288,32 +292,61 @@ def simulate_minute_consumption():
                 minute_consumption = 0
                 logger.debug(f"Spotřebič {appliance_id}: přeskakuji (typ {app_type})")
                 
-            houses[house_id].append({
+            # Přidáme spotřebič do seznamu a přičteme jeho spotřebu k celkové
+            houses[house_id]['appliances'].append({
                 "appliance_id": appliance_id,
                 "consumption_w": minute_consumption
             })
+            houses[house_id]['total_wh'] += minute_consumption  # Wm = Wh/60
         
         logger.info(f"Zpracováno {len(houses)} domů")
         
-        for house_id, appliances in houses.items():
-            if appliances:
-                logger.debug(f"Ukládám data pro dům {house_id}: {json.dumps(appliances)}")
+        # Pro každý dům uložíme data a odečteme z baterie
+        for house_id, house_data in houses.items():
+            if house_data['appliances']:
+                # Načteme aktuální stav baterie a účinnost vybíjení
+                cur.execute("""
+                    SELECT current_battery_level, discharging_efficiency
+                    FROM api_house
+                    WHERE id = %s
+                """, [house_id])
+                battery_level, efficiency = cur.fetchone()
+                
+                # Převedeme spotřebu na kWh a aplikujeme účinnost
+                needed_kwh = (house_data['total_wh'] / 1000) / (efficiency / 100)
+                
+                # Vybijeme baterii
+                new_level = battery_level - needed_kwh
+                
+                # Aktualizujeme stav baterie
+                cur.execute("""
+                    UPDATE api_house 
+                    SET current_battery_level = %s
+                    WHERE id = %s
+                """, [new_level, house_id])
+                
+                logger.debug(f"Dům {house_id}: spotřeba {house_data['total_wh']:.2f}Wh, baterie {battery_level:.2f}kWh -> {new_level:.2f}kWh")
+                
+                # Uložíme data o spotřebě
                 cur.execute("""
                     INSERT INTO api_consumptiondata (house_id, date, time, appliance_consumption)
                     VALUES (%s, %s, %s, %s)
                     ON CONFLICT (house_id, date, time) 
                     DO UPDATE SET appliance_consumption = EXCLUDED.appliance_consumption
-                """, (house_id, current_date, current_time_str, json.dumps(appliances)))
+                """, (house_id, current_date, current_time_str, json.dumps(house_data['appliances'])))
         
         conn.commit()
         logger.info(f"Hotovo! Simulováno {len(houses)} domů v čase {current_date} {current_time_str}")
         
     except Exception as e:
         logger.error(f"Chyba při simulaci: {str(e)}")
-        conn.rollback()
+        if 'conn' in locals():
+            conn.rollback()
     finally:
-        cur.close()
-        conn.close()
+        if 'cur' in locals():
+            cur.close()
+        if 'conn' in locals():
+            conn.close()
 
 if __name__ == "__main__":
     simulate_minute_consumption()

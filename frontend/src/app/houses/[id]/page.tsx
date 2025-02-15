@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { ArrowLeft, Trash2, Power } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
+import { format } from "date-fns";
 import HouseDialog from "@/app/components/HouseDialog";
 import ApplianceDialog from "@/app/components/ApplianceDialog";
 import { Appliance } from "@/types/appliance";
@@ -30,6 +31,13 @@ interface House {
   risk_level: "LOW" | "MEDIUM" | "HIGH";
 }
 
+interface DailyStats {
+  consumption_kwh: number;
+  solar_charged_kwh: number;
+  grid_charged_kwh: number;
+  grid_charged_cost: number;
+}
+
 export default function Page() {
   const params = useParams();
   const [house, setHouse] = useState<House | null>(null);
@@ -38,6 +46,49 @@ export default function Page() {
   const [error, setError] = useState<string | null>(null);
   const [date, setDate] = useState<Date>(new Date());
   const [isTogglingSimulation, setIsTogglingSimulation] = useState(false);
+  const [dailyStats, setDailyStats] = useState<DailyStats>({
+    consumption_kwh: 0,
+    solar_charged_kwh: 0,
+    grid_charged_kwh: 0,
+    grid_charged_cost: 0,
+  });
+
+  const fetchDailyStats = async () => {
+    try {
+      const [consumptionResponse, chargingResponse] = await Promise.all([
+        fetch(
+          `${API_URL}/api/houses/${params.id}/consumption/?date=${format(
+            date,
+            "yyyy-MM-dd"
+          )}`,
+          {
+            credentials: "include",
+          }
+        ),
+        fetch(
+          `${API_URL}/api/houses/${params.id}/charging/?date=${format(
+            date,
+            "yyyy-MM-dd"
+          )}`,
+          {
+            credentials: "include",
+          }
+        ),
+      ]);
+
+      const consumptionData = await consumptionResponse.json();
+      const chargingData = await chargingResponse.json();
+
+      setDailyStats({
+        consumption_kwh: consumptionData.daily_total / 1000, // Převod z Wh na kWh
+        solar_charged_kwh: chargingData.solar_charged_kwh,
+        grid_charged_kwh: chargingData.grid_charged_kwh,
+        grid_charged_cost: chargingData.grid_charged_cost,
+      });
+    } catch (err) {
+      console.error("Failed to fetch daily stats:", err);
+    }
+  };
 
   const fetchData = useCallback(async () => {
     try {
@@ -123,8 +174,9 @@ export default function Page() {
   useEffect(() => {
     if (params.id) {
       fetchData();
+      fetchDailyStats();
     }
-  }, [params.id, fetchData]);
+  }, [params.id, date, fetchData]);
 
   if (isLoading) return <div className="text-center p-4">Načítání...</div>;
   if (error || !house)
@@ -167,9 +219,12 @@ export default function Page() {
           {/* Parametry domu */}
           <Card className="bg-white shadow-sm border border-gray-100">
             <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-xl font-semibold text-gray-900">
-                Parametry domu
-              </CardTitle>
+              <div className="flex items-center gap-4">
+                <CardTitle className="text-xl font-semibold text-gray-900">
+                  Parametry domu
+                </CardTitle>
+                <DatePicker date={date} onSelect={setDate} />
+              </div>
               <div className="flex gap-2">
                 <Button
                   variant="ghost"
@@ -238,6 +293,46 @@ export default function Page() {
                     </div>
                   </div>
                 </div>
+
+                {/* Denní statistiky */}
+                <div className="col-span-2 bg-green-50 rounded-lg p-4">
+                  <h3 className="text-sm font-medium text-green-900 mb-3">
+                    Denní statistiky {format(date, "dd.MM.yyyy")}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm flex justify-between">
+                        <span className="text-green-600">Spotřeba:</span>
+                        <span className="font-medium text-green-900">
+                          {dailyStats.consumption_kwh.toFixed(2)} kWh
+                        </span>
+                      </p>
+                      <p className="text-sm flex justify-between">
+                        <span className="text-green-600">
+                          Nabito ze solárů:
+                        </span>
+                        <span className="font-medium text-green-900">
+                          {dailyStats.solar_charged_kwh.toFixed(2)} kWh
+                        </span>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm flex justify-between">
+                        <span className="text-green-600">Nabito ze sítě:</span>
+                        <span className="font-medium text-green-900">
+                          {dailyStats.grid_charged_kwh.toFixed(2)} kWh
+                        </span>
+                      </p>
+                      <p className="text-sm flex justify-between">
+                        <span className="text-green-600">Cena nabíjení:</span>
+                        <span className="font-medium text-green-900">
+                          {dailyStats.grid_charged_cost.toFixed(2)} Kč
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
                 {/* Výkonové parametry */}
                 <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
                   <h3 className="text-sm font-medium text-gray-900">
@@ -390,7 +485,6 @@ export default function Page() {
                 <CardTitle className="text-xl font-semibold text-gray-900">
                   Spotřeba energie
                 </CardTitle>
-                <DatePicker date={date} onSelect={setDate} />
               </CardHeader>
               <CardContent>
                 <ConsumptionChart

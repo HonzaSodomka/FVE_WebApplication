@@ -1,5 +1,5 @@
 import psycopg2
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 logging.basicConfig(
@@ -11,9 +11,74 @@ logging.basicConfig(
 
 logger = logging.getLogger('api')
 
+def get_simulation_interval():
+    """Zjistí časový interval simulace z databáze"""
+    try:
+        conn = psycopg2.connect(
+            dbname="fve_db",
+            user="postgres",
+            password="heslo",
+            host="db"
+        )
+        cur = conn.cursor()
+        
+        # Najdeme první a poslední záznam pro dnešní den
+        today = datetime.now().date()
+        cur.execute("""
+            SELECT timestamp 
+            FROM api_solardata 
+            WHERE DATE(timestamp) = %s
+            ORDER BY timestamp ASC 
+            LIMIT 1
+        """, (today,))
+        
+        start_time = cur.fetchone()
+        if not start_time:
+            return None, None
+            
+        cur.execute("""
+            SELECT timestamp 
+            FROM api_solardata 
+            WHERE DATE(timestamp) = %s
+            ORDER BY timestamp DESC 
+            LIMIT 1
+        """, (today,))
+        
+        end_time = cur.fetchone()
+        
+        cur.close()
+        conn.close()
+        
+        return start_time[0], end_time[0]
+        
+    except Exception as e:
+        logger.error(f"Error getting simulation interval: {str(e)}")
+        return None, None
+
 def simulate_charging():
     try:
         logger.info("Starting charging simulation")
+        
+        # Zjistíme interval simulace
+        start_time, end_time = get_simulation_interval()
+        if not start_time or not end_time:
+            logger.error("Could not determine simulation interval")
+            return
+            
+        current_time = datetime.now()
+        
+        # Kontrola jestli jsme v intervalu simulace
+        if current_time.time() < start_time.time() or current_time.time() > end_time.time():
+            logger.info(f"Current time {current_time} is outside simulation interval {start_time.time()} - {end_time.time()}")
+            return
+            
+        # Najdeme platnou predikci pro aktuální čas
+        prediction_time = current_time.replace(minute=0, second=0, microsecond=0)
+        if current_time.minute < start_time.minute:
+            prediction_time = prediction_time + timedelta(hours=1)
+            
+        logger.info(f"Current time: {current_time}, using prediction for: {prediction_time}")
+        
         conn = psycopg2.connect(
             dbname="fve_db",
             user="postgres",
@@ -32,24 +97,22 @@ def simulate_charging():
         """)
         houses = cur.fetchall()
         logger.info(f"Found {len(houses)} active houses")
-
-        current_time = datetime.now().replace(second=0, microsecond=0)
         
         for house in houses:
             (house_id, battery_capacity, current_level, 
              max_charging_power, charging_eff, solar_variation) = house
 
             try:
-                # Získáme předpověď solární výroby pro aktuální hodinu
+                # Získáme předpověď solární výroby pro danou hodinu
                 cur.execute("""
                     SELECT watts
                     FROM api_solardata
                     WHERE timestamp = %s
-                """, (current_time,))
+                """, (prediction_time,))
                 solar_data = cur.fetchone()
 
                 if not solar_data:
-                    logger.warning(f"No solar prediction for house {house_id} at {current_time}")
+                    logger.warning(f"No solar prediction for house {house_id} at {prediction_time}")
                     continue
 
                 predicted_watts = solar_data[0]
@@ -92,7 +155,8 @@ def simulate_charging():
 
                         logger.info(f"""
                             House {house_id} solar charging:
-                            Time: {current_time}
+                            Current time: {current_time}
+                            Using prediction for: {prediction_time}
                             Solar variation: {solar_variation:.2f}
                             Predicted power: {predicted_watts:.2f}W
                             Actual power: {actual_watts:.2f}W

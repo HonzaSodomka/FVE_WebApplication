@@ -325,7 +325,7 @@ def simulate_minute_consumption():
                     WHERE id = %s
                 """, [new_level, house_id])
                 
-                logger.debug(f"Dům {house_id}: spotřeba {house_data['total_wh']:.2f}Wh, baterie {battery_level:.2f}kWh -> {new_level:.2f}kWh")
+                logger.info(f"Dům {house_id}: spotřeba {house_data['total_wh']:.2f}Wh, baterie {battery_level:.2f}kWh -> {new_level:.2f}kWh")
                 
                 # Uložíme data o spotřebě
                 cur.execute("""

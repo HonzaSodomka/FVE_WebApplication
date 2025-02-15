@@ -1,6 +1,5 @@
 import psycopg2
 from datetime import datetime, timedelta
-import pytz
 import logging
 
 logging.basicConfig(
@@ -11,7 +10,6 @@ logging.basicConfig(
 )
 
 logger = logging.getLogger('api')
-prague_tz = pytz.timezone('Europe/Prague')
 
 def get_prediction_timestamp(current_time, conn, cur):
     """Najde správný timestamp pro predikci nebo vrátí None pokud jsme mimo rozsah dat"""
@@ -40,7 +38,7 @@ def get_prediction_timestamp(current_time, conn, cur):
         return None
         
     # Kontrola jestli jsme v rozsahu simulace
-    if current_time < first_record[0] or current_time > last_record[0]:
+    if current_time < first_record[0].replace(tzinfo=None) or current_time > last_record[0].replace(tzinfo=None):
         logger.info(f"Current time {current_time} is outside simulation range {first_record[0]} - {last_record[0]}")
         return None
         
@@ -70,7 +68,8 @@ def simulate_charging():
         )
         cur = conn.cursor()
 
-        current_time = datetime.now(prague_tz)
+        # Používáme naivní datetime bez timezone
+        current_time = datetime.now().replace(tzinfo=None)
         prediction_time = get_prediction_timestamp(current_time, conn, cur)
         
         if not prediction_time:

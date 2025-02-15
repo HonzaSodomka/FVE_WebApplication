@@ -38,12 +38,12 @@ def get_prediction_timestamp(current_time, conn, cur):
         return None
         
     # Kontrola jestli jsme v rozsahu simulace
-    if current_time < first_record[0] or current_time > last_record[0]:
+    if current_time < first_record[0].replace(tzinfo=None) or current_time > last_record[0].replace(tzinfo=None):
         logger.info(f"Current time {current_time} is outside simulation range {first_record[0]} - {last_record[0]}")
         return None
         
     # Pro čas po posledním hodinovém záznamu použijeme poslední dostupný záznam dne
-    next_hour = (current_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0).astimezone()
+    next_hour = (current_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
     cur.execute("""
         SELECT timestamp 
         FROM api_solardata 
@@ -68,8 +68,8 @@ def simulate_charging():
         )
         cur = conn.cursor()
 
-        # Vytvoříme UTC datetime pro porovnání s databází
-        current_time = datetime.now().astimezone()
+        # Používáme naivní datetime bez timezone
+        current_time = datetime.now().replace(tzinfo=None)
         prediction_time = get_prediction_timestamp(current_time, conn, cur)
         
         if not prediction_time:
@@ -96,51 +96,51 @@ def simulate_charging():
              solar_power) = house
 
             try:
-                # Získáme předpověď solární výroby pro danou hodinu
+                # Získáme data o výrobě pro danou hodinu
                 cur.execute("""
-                    SELECT watts
+                    SELECT watt_hours_period
                     FROM api_solardata
                     WHERE timestamp = %s
                 """, (prediction_time,))
                 solar_data = cur.fetchone()
 
                 if not solar_data:
-                    logger.warning(f"No solar prediction for house {house_id} at {prediction_time}")
+                    logger.warning(f"No solar data for house {house_id} at {prediction_time}")
                     continue
 
-                predicted_watts = solar_data[0]
+                # Vyrobená energie za hodinu v Wh (pro 20kWp)
+                period_wh = solar_data[0]
 
-                # Převod na instalovaný výkon domu (data jsou pro 20kWp)
-                predicted_watts = predicted_watts * (solar_power / 20)
+                # Přepočet na instalovaný výkon domu
+                period_wh = period_wh * (solar_power / 20)
 
-                # Aplikujeme variaci na predikovanou výrobu
-                actual_watts = predicted_watts * solar_variation if predicted_watts else 0
+                # Aplikujeme variaci
+                actual_period_wh = period_wh * solar_variation if period_wh else 0
                 
-                # Převod na minutovou výrobu v kW (z W)
-                available_power = actual_watts / 1000
-                
-                # Za minutu můžeme vyrobit 1/60 hodinové výroby
-                available_kwh = available_power / 60
+                # Převod na minutovou výrobu
+                available_wh = actual_period_wh / 60
 
-                # Pokud máme solární výrobu, pokusíme se nabít baterii
-                if available_kwh > 0:
+                # Pokud máme výrobu, pokusíme se nabít baterii
+                if available_wh > 0:
                     # Omezení nabíjecího výkonu na minutu
-                    max_charging_kwh = max_charging_power / 60
+                    max_charging_wh = (max_charging_power * 1000) / 60
                     
-                    # Volné místo v baterii
-                    available_space = battery_capacity - current_level
+                    # Volné místo v baterii (Wh)
+                    available_space_wh = (battery_capacity - current_level) * 1000
                     
-                    if available_space > 0:
-                        # Určíme kolik energie můžeme uložit
-                        charging_amount = min(
-                            available_kwh,      # Solární výroba
-                            max_charging_kwh,   # Limit nabíjení
-                            available_space     # Místo v baterii
+                    if available_space_wh > 0:
+                        # Určíme kolik energie můžeme uložit (Wh)
+                        charging_amount_wh = min(
+                            available_wh,         # Solární výroba
+                            max_charging_wh,      # Limit nabíjení
+                            available_space_wh    # Místo v baterii
                         )
                         
                         # Aplikujeme účinnost nabíjení
-                        actual_charge = charging_amount * (charging_eff / 100)
-                        new_level = current_level + actual_charge
+                        actual_charge_wh = charging_amount_wh * (charging_eff / 100)
+                        
+                        # Převod na kWh pro uložení
+                        new_level = current_level + (actual_charge_wh / 1000)
 
                         # Aktualizujeme stav baterie
                         cur.execute("""
@@ -155,10 +155,10 @@ def simulate_charging():
                             Using prediction for: {prediction_time}
                             Solar power of house: {solar_power}kWp
                             Solar variation: {solar_variation:.2f}
-                            Predicted power: {predicted_watts:.2f}W
-                            Actual power: {actual_watts:.2f}W
-                            Available energy: {available_kwh*1000:.2f}Wh/min
-                            Charged: {actual_charge*1000:.2f}Wh
+                            Period energy: {period_wh:.2f}Wh
+                            Actual period energy: {actual_period_wh:.2f}Wh
+                            Available per minute: {available_wh:.2f}Wh
+                            Charged: {actual_charge_wh:.2f}Wh
                             Battery: {current_level:.2f}kWh -> {new_level:.2f}kWh
                         """)
 

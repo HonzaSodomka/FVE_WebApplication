@@ -43,7 +43,7 @@ def get_prediction_timestamp(current_time, conn, cur):
         return None
         
     # Pro čas po posledním hodinovém záznamu použijeme poslední dostupný záznam dne
-    next_hour = (current_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    next_hour = (current_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0).astimezone()
     cur.execute("""
         SELECT timestamp 
         FROM api_solardata 
@@ -68,7 +68,8 @@ def simulate_charging():
         )
         cur = conn.cursor()
 
-        current_time = datetime.now()
+        # Vytvoříme UTC datetime pro porovnání s databází
+        current_time = datetime.now().astimezone()
         prediction_time = get_prediction_timestamp(current_time, conn, cur)
         
         if not prediction_time:

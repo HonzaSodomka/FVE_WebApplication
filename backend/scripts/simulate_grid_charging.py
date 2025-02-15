@@ -26,6 +26,9 @@ def simulate_grid_charging():
         current_date = current_time.date()
         current_hour = current_time.hour
 
+        # Debug log pro načtení ceny
+        logger.info(f"Loading price data for date {current_date} hour {current_hour}")
+        
         # Získáme aktuální cenu elektřiny
         cur.execute("""
             SELECT price_czk
@@ -33,15 +36,25 @@ def simulate_grid_charging():
             WHERE date = %s AND hour = %s
         """, (current_date, current_hour))
         price_data = cur.fetchone()
-        logger.info(f"Cena pro hodinu {current_hour} je {price_data[0]/1000}")
-
+        
         if not price_data:
             logger.error(f"No price data for {current_date} {current_hour}:00")
             return
             
         price_mwh = price_data[0]  # Cena v Kč/MWh
         price_kwh = price_mwh / 1000  # Převod na Kč/kWh
+        logger.info(f"Cena pro hodinu {current_hour} je {price_kwh:.3f}")
 
+        # Debug log pro načtení domů
+        logger.info("Loading active houses with SQL:")
+        logger.info("""
+            SELECT 
+                id, battery_capacity, current_battery_level,
+                min_battery_level, max_charging_power, charging_efficiency
+            FROM api_house 
+            WHERE is_active = true
+        """)
+        
         # Načteme aktivní domy
         cur.execute("""
             SELECT 
@@ -54,12 +67,26 @@ def simulate_grid_charging():
         logger.info(f"Found {len(houses)} active houses")
         
         for house in houses:
-            (house_id, battery_capacity, current_level, 
-             min_battery_level, max_charging_power, charging_eff) = house
-
             try:
+                # Debug log pro data domu
+                logger.info(f"Processing house data: {house}")
+                
+                (house_id, battery_capacity, current_level, 
+                 min_battery_level, max_charging_power, charging_eff) = house
+
                 # Vypočteme minimální úroveň v kWh
                 min_level_kwh = battery_capacity * (min_battery_level / 100)
+                
+                # Debug log pro stav baterie
+                logger.info(f"""
+                    House {house_id} battery status:
+                    - Current level: {current_level}
+                    - Min level: {min_level_kwh}
+                    - Battery capacity: {battery_capacity}
+                    - Min battery level %: {min_battery_level}
+                    - Max charging power: {max_charging_power}
+                    - Charging efficiency: {charging_eff}
+                """)
                 
                 # Kontrola jestli jsme pod minimem
                 if current_level < min_level_kwh:
@@ -79,6 +106,16 @@ def simulate_grid_charging():
                     actual_charge = charge_amount * (charging_eff / 100)
                     new_level = current_level + actual_charge
 
+                    # Debug log před aktualizací baterie
+                    logger.info(f"""
+                        Charging calculation:
+                        - Max charge per minute: {max_charge_kwh}
+                        - Needed: {needed_kwh}
+                        - Will charge: {charge_amount}
+                        - After efficiency: {actual_charge}
+                        - New level will be: {new_level}
+                    """)
+
                     # Aktualizujeme stav baterie
                     cur.execute("""
                         UPDATE api_house 
@@ -89,9 +126,17 @@ def simulate_grid_charging():
                     # Spočítáme cenu nabití
                     charge_cost = actual_charge * price_kwh
 
+                    # Debug log před uložením do ChargingData
+                    logger.info(f"""
+                        Will save to ChargingData:
+                        - Date: {current_date}
+                        - Grid charged: {actual_charge}
+                        - Cost: {charge_cost}
+                    """)
+
                     # Uložíme nabití do ChargingData
                     cur.execute("""
-                        INSERT INTO api_chargingdata (house_id, date, grid_charged_kwh, grid_charged_cost)
+                        INSERT INTO api_chargingdata (house_id, date, solar_charged_kwh, grid_charged_kwh, grid_charged_cost)
                         VALUES (%s, %s, %s, %s, %s)
                         ON CONFLICT (house_id, date)
                         DO UPDATE SET 
@@ -100,6 +145,7 @@ def simulate_grid_charging():
                     """, (
                         house_id, 
                         current_date,
+                        0,                  # solar_charged_kwh
                         actual_charge,      # grid_charged_kwh
                         charge_cost         # grid_charged_cost
                     ))

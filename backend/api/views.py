@@ -1,5 +1,5 @@
 from django.http import JsonResponse
-from .models import ConsumptionData, PriceData, SolarData, House, Appliance
+from .models import ChargingData, ConsumptionData, PriceData, SolarData, House, Appliance
 from datetime import datetime
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
@@ -585,3 +585,90 @@ def toggle_simulation(request, house_id):
     except Exception as e:
         logger.error(f"Error toggling simulation: {str(e)}")
         return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+    
+@csrf_exempt
+@require_http_methods(["GET", "POST", "PATCH"])
+def charging_data(request, house_id):
+    try:
+        house = House.objects.get(id=house_id)
+    except House.DoesNotExist:
+        logger.warning(f"Attempted to access charging data for non-existent house with ID {house_id}")
+        return JsonResponse({'error': 'Dům nenalezen'}, status=404)
+        
+    if request.method == "GET":
+        try:
+            date_str = request.GET.get('date')
+            if not date_str:
+                return JsonResponse({'error': 'Chybí parametr date'}, status=400)
+                
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            charging = ChargingData.objects.filter(
+                house=house,
+                date=date
+            ).first()
+            
+            if not charging:
+                return JsonResponse({
+                    'solar_charged_kwh': 0,
+                    'grid_charged_kwh': 0,
+                    'grid_charged_cost': 0
+                })
+            
+            return JsonResponse({
+                'solar_charged_kwh': charging.solar_charged_kwh,
+                'grid_charged_kwh': charging.grid_charged_kwh,
+                'grid_charged_cost': charging.grid_charged_cost
+            })
+            
+        except ValueError:
+            logger.error(f"Invalid date format: {date_str}")
+            return JsonResponse({'error': 'Neplatný formát data'}, status=400)
+        except Exception as e:
+            logger.error(f"Error fetching charging data: {str(e)}")
+            return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+            
+    elif request.method in ["POST", "PATCH"]:
+        try:
+            data = json.loads(request.body)
+            date_str = data.get('date')
+            if not date_str:
+                return JsonResponse({'error': 'Chybí parametr date'}, status=400)
+                
+            date = datetime.strptime(date_str, '%Y-%m-%d').date()
+            
+            # Získáme nebo vytvoříme záznam pro daný den
+            charging, created = ChargingData.objects.get_or_create(
+                house=house,
+                date=date,
+                defaults={
+                    'solar_charged_kwh': 0,
+                    'grid_charged_kwh': 0,
+                    'grid_charged_cost': 0
+                }
+            )
+            
+            # Přičteme nové hodnoty k existujícím
+            if 'solar_charged_kwh' in data:
+                charging.solar_charged_kwh += data['solar_charged_kwh']
+            if 'grid_charged_kwh' in data:
+                charging.grid_charged_kwh += data['grid_charged_kwh']
+            if 'grid_charged_cost' in data:
+                charging.grid_charged_cost += data['grid_charged_cost']
+            
+            charging.save()
+            
+            return JsonResponse({
+                'solar_charged_kwh': charging.solar_charged_kwh,
+                'grid_charged_kwh': charging.grid_charged_kwh,
+                'grid_charged_cost': charging.grid_charged_cost
+            })
+            
+        except ValueError:
+            logger.error(f"Invalid date format in request data")
+            return JsonResponse({'error': 'Neplatný formát data'}, status=400)
+        except Exception as e:
+            logger.error(f"Error updating charging data: {str(e)}")
+            return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
+            
+    return JsonResponse({'error': 'Neplatná metoda'}, status=405)

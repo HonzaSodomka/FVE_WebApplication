@@ -149,6 +149,17 @@ def simulate_charging():
                             WHERE id = %s
                         """, (new_level, house_id))
 
+                        cur.execute("""
+                            INSERT INTO api_chargingdata (house_id, date, solar_charged_kwh)
+                            VALUES (%s, %s, %s)
+                            ON CONFLICT (house_id, date)
+                            DO UPDATE SET solar_charged_kwh = api_chargingdata.solar_charged_kwh + EXCLUDED.solar_charged_kwh
+                        """, (
+                            house_id, 
+                            current_time.date(),
+                            actual_charge_wh / 1000  # Převod Wh na kWh
+                        ))
+
                         logger.info(f"""
                             House {house_id} solar charging:
                             Current time: {current_time}

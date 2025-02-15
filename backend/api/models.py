@@ -290,3 +290,36 @@ class ConsumptionData(models.Model):
     def __str__(self):
         total = sum(item['consumption_w'] for item in self.appliance_consumption)
         return f"{self.house.name} - {self.date} {self.time}: {total}W"
+    
+class ChargingData(models.Model):
+    house = models.ForeignKey(
+        House,
+        on_delete=models.CASCADE,
+        related_name='charging_data',
+        verbose_name="Dům"
+    )
+    date = models.DateField(verbose_name="Datum", default=date.today)
+    solar_charged_kwh = models.FloatField(
+        verbose_name="Nabito ze solárů (kWh)",
+        default=0
+    )
+    grid_charged_kwh = models.FloatField(
+        verbose_name="Nabito ze sítě (kWh)",
+        default=0
+    )
+    grid_charged_cost = models.FloatField(
+        verbose_name="Cena nabíjení ze sítě (Kč)",
+        default=0
+    )
+
+    class Meta:
+        unique_together = ['house', 'date']
+        indexes = [
+            models.Index(fields=['house', 'date']),
+        ]
+        ordering = ['date']
+        verbose_name = "Nabíjení"
+        verbose_name_plural = "Nabíjení"
+
+    def __str__(self):
+        return f"{self.house.name} - {self.date}: Solar {self.solar_charged_kwh:.1f}kWh, Grid {self.grid_charged_kwh:.1f}kWh ({self.grid_charged_cost:.0f}Kč)"

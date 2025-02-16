@@ -50,14 +50,13 @@ def get_adjusted_duration(min_duration, max_duration, is_peak_time, for_active_s
 
 def simulate_minute_consumption():
     try:
-        logger.info("Začínám simulaci")
+        logger.info("ZAHAJUJI SIMULACI SPOTŘEBY")
         conn = psycopg2.connect(
             dbname="fve_db",
             user="postgres",
             password="heslo",
             host="db"
         )
-        logger.info("Připojeno k databázi")
         cur = conn.cursor()
 
         current_time = datetime.now().replace(second=0, microsecond=0)
@@ -336,7 +335,7 @@ def simulate_minute_consumption():
                 """, (house_id, current_date, current_time_str, json.dumps(house_data['appliances'])))
         
         conn.commit()
-        logger.info(f"Hotovo! Simulováno {len(houses)} domů v čase {current_date} {current_time_str}")
+        logger.info(f"HOTOVO! SIMULOVÁNO {len(houses)} DOMŮ V ČASE {current_date} {current_time_str}")
         
     except Exception as e:
         logger.error(f"Chyba při simulaci: {str(e)}")

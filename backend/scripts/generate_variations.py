@@ -13,7 +13,7 @@ logger = logging.getLogger('api')
 
 def generate_variations():
     try:
-        logger.info("Starting generation of solar variations")
+        logger.info("ZAČÁTEK SOLAR VARIATIONS PLÁNOVÁNÍ")
         conn = psycopg2.connect(
             dbname="fve_db",
             user="postgres",
@@ -25,7 +25,7 @@ def generate_variations():
         # Načteme aktivní domy
         cur.execute("SELECT id FROM api_house WHERE is_active = true")
         houses = cur.fetchall()
-        logger.info(f"Found {len(houses)} active houses")
+        logger.info(f"Plánuji solar variations pro {len(houses)} domů")
 
         # Pro každý dům vygenerujeme novou variaci
         for house_id, in houses:
@@ -39,17 +39,17 @@ def generate_variations():
                     WHERE id = %s
                 """, (variation, house_id))
                 
-                logger.info(f"House {house_id}: new variation = {variation:.2f}")
+                logger.info(f"Dům s ID {house_id}: variace pro dnešek = {variation:.2f}")
                 
             except Exception as e:
-                logger.error(f"Error generating variation for house {house_id}: {str(e)}")
+                logger.error(f"Chyba při generování variace pro dům s ID {house_id}: {str(e)}")
                 continue
 
         conn.commit()
-        logger.info("Successfully generated variations for all active houses")
+        logger.info("GENEROVÁNÍ VARIACÍ PRO VŠECHNY DOMY ÚSPĚŠNĚ DOKONČENO")
 
     except Exception as e:
-        logger.error(f"Failed to generate variations: {str(e)}")
+        logger.error(f"Chyba při generování variací: {str(e)}")
         if 'conn' in locals():
             conn.rollback()
     finally:

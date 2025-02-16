@@ -29,18 +29,17 @@ def fetch_solar_forecast():
    }
    
    #Volání api url s hlavičkama
-   logger.info(f"Request for solar forecast sent to {url}")
+   logger.info(f"POŽADAVEK NA PREDIKCI O NABÍJENÍ Z FVE ODESLÁN NA {url}")
    response = requests.get(url, headers=headers)
    #200 = success
    if response.status_code == 200:
-       logger.info("Successfully fetched solar forecast from API")
+       logger.info("Solární předpověď úspěšně načtena z API API")
        return response.json()
    else:
-       logger.error(f"API request failed with status code: {response.status_code}")
+       logger.error(f"API request selhal. Chybový kód: {response.status_code}")
        raise Exception(f"Failed to fetch data: {response.status_code}")
 
 def save_solar_forecast():
-   logger.info("Connecting to database")
    conn = psycopg2.connect(
        dbname="fve_db",
        user="postgres",
@@ -52,7 +51,7 @@ def save_solar_forecast():
    try:
        data = fetch_solar_forecast()
        tomorrow = (date.today() + timedelta(days=1)).strftime('%Y-%m-%d')
-       logger.info(f"Saving solar forecast for {tomorrow}")
+       logger.info(f"Ukládám předpověď solární výroby pro den {tomorrow}")
        
        records_updated = 0
        # Najde timestamp v první části json dat (u wh_period) a když splní že je pro zítřek, vytáhne i zbytek dat a uloží do db
@@ -82,25 +81,25 @@ def save_solar_forecast():
                records_updated += 1
        
        conn.commit()
-       logger.info(f"Successfully saved {records_updated} solar forecast records for {tomorrow}")
+       logger.info(f"ÚSPĚŠNĚ ULOŽENO {records_updated} SOLÁRNÍCH PŘEDPOVĚDÍ PRO {tomorrow}")
        
    except KeyError as e:
-       logger.error(f"Unexpected API response format: {str(e)}")
+       logger.error(f"Neočekávaný formát API odpovědi: {str(e)}")
        conn.rollback()
    except psycopg2.Error as e:
-       logger.error(f"Database error: {str(e)}")
+       logger.error(f"Chyba databáze: {str(e)}")
        conn.rollback()
    except Exception as e:
-       logger.error(f"Unexpected error saving solar forecast: {str(e)}")
+       logger.error(f"Neočekávaná chyba při ukládání solární predikce {str(e)}")
        conn.rollback()
    finally:
        cur.close()
        conn.close()
-       logger.debug("Database connection closed")
+       logger.debug("Připojení k databázi ukončeno")
 
 if __name__ == "__main__":
    try:
        save_solar_forecast()
    except Exception as e:
-       logger.error(f"Script failed: {str(e)}")
+       logger.error(f"Skript selhal: {str(e)}")
        raise

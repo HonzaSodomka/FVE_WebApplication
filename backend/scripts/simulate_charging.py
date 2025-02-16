@@ -39,7 +39,7 @@ def get_prediction_timestamp(current_time, conn, cur):
         
     # Kontrola jestli jsme v rozsahu simulace
     if current_time < first_record[0].replace(tzinfo=None) or current_time > last_record[0].replace(tzinfo=None):
-        logger.info(f"Current time {current_time} is outside simulation range {first_record[0]} - {last_record[0]}")
+        logger.info(f"Aktuální čas {current_time} je mimo čas simulace nabíjení ze solárů {first_record[0]} - {last_record[0]}")
         return None
         
     # Pro čas po posledním hodinovém záznamu použijeme poslední dostupný záznam dne
@@ -58,7 +58,7 @@ def get_prediction_timestamp(current_time, conn, cur):
 
 def simulate_charging():
     try:
-        logger.info("Starting charging simulation")
+        logger.info("ZAHAJUJI SIMULACI NABÍJENÍ ZE SOLÁRŮ")
         
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -73,10 +73,10 @@ def simulate_charging():
         prediction_time = get_prediction_timestamp(current_time, conn, cur)
         
         if not prediction_time:
-            logger.error("Could not determine prediction timestamp")
+            logger.error("Nelze určit časovou značku predikce")
             return
             
-        logger.info(f"Current time: {current_time}, using prediction for: {prediction_time}")
+        logger.info(f"Aktuální čas: {current_time}, používá se predikce pro: {prediction_time}h")
 
         # Načteme aktivní domy
         cur.execute("""
@@ -88,7 +88,7 @@ def simulate_charging():
             WHERE is_active = true
         """)
         houses = cur.fetchall()
-        logger.info(f"Found {len(houses)} active houses")
+        logger.info(f"Nalezeno {len(houses)} aktivních domů")
         
         for house in houses:
             (house_id, battery_capacity, current_level, 
@@ -105,7 +105,7 @@ def simulate_charging():
                 solar_data = cur.fetchone()
 
                 if not solar_data:
-                    logger.warning(f"No solar data for house {house_id} at {prediction_time}")
+                    logger.warning(f"Žádná solární data pro dům {house_id} v čase {prediction_time}")
                     continue
 
                 # Vyrobená energie za hodinu v Wh (pro 20kWp)
@@ -163,27 +163,26 @@ def simulate_charging():
                         ))
 
                         logger.info(f"""
-                            House {house_id} solar charging:
-                            Current time: {current_time}
-                            Using prediction for: {prediction_time}
-                            Solar power of house: {solar_power}kWp
-                            Solar variation: {solar_variation:.2f}
-                            Period energy: {period_wh:.2f}Wh
-                            Actual period energy: {actual_period_wh:.2f}Wh
-                            Available per minute: {available_wh:.2f}Wh
-                            Charged: {actual_charge_wh:.2f}Wh
-                            Battery: {current_level:.2f}kWh -> {new_level:.2f}kWh
+                            Dům {house_id} solární nabíjení:
+                            Čas: {current_time} (predikce {prediction_time})
+                            Výkon solárů: {solar_power}kWp
+                            Variace: {solar_variation:.2f}
+                            Energie za hodinu bez variace: {period_wh:.2f}Wh
+                            Energie za hodinu s variací: {actual_period_wh:.2f}Wh
+                            Vyrobeno: {available_wh:.2f}Wh
+                            Reálně dobito: {actual_charge_wh:.2f}Wh
+                            Baterie: {current_level:.2f}kWh -> {new_level:.2f}kWh
                         """)
 
             except Exception as e:
-                logger.error(f"Error processing house {house_id}: {str(e)}")
+                logger.error(f"Chyba při zpracování domu {house_id}: {str(e)}")
                 continue
 
         conn.commit()
-        logger.info("Charging simulation completed successfully")
+        logger.info("SIMULACE DOBÍJENÍ ZE SOLÁRŮ ÚSPĚŠNĚ DOKONČENA")
 
     except Exception as e:
-        logger.error(f"Charging simulation failed: {str(e)}")
+        logger.error(f"Simulace dobíjení ze solárlů selhala: {str(e)}")
         if 'conn' in locals():
             conn.rollback()
     finally:

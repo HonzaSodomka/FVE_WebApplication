@@ -17,14 +17,14 @@ logger = logging.getLogger('api')
 def fetch_price_data():
     url = "https://spotovaelektrina.cz/api/v1/price/get-prices-json"
     #Stáhne data z URL
-    logger.info(f"Request for price data sent to{url}")
+    logger.info(f"POŽADAVEK NA DATA O SPOTOVÝCH CENÁCH ODESLÁN NA {url}")
     response = requests.get(url)
     #200 = úspěšný požadavek
     if response.status_code == 200:
-        logger.info("Successfully fetched price data from API")
+        logger.info("Spotové ceny úspěšně načteny z API")
         return response.json()
     else:
-        logger.error(f"API request failed with status code: {response.status_code}")
+        logger.error(f"API request selhal. Chybový kód: {response.status_code}")
         raise Exception(f"Failed to fetch data: {response.status_code}")
 
 def save_tomorrow_prices():
@@ -32,7 +32,6 @@ def save_tomorrow_prices():
     data = fetch_price_data()
     
     # Připojení k databázi
-    logger.info("Connecting to database")
     conn = psycopg2.connect(
         dbname="fve_db",
         user="postgres",
@@ -43,7 +42,7 @@ def save_tomorrow_prices():
     
     #Zítřek = dnešek + 1 den
     tomorrow = date.today() + timedelta(days=1)
-    logger.info(f"Saving price data for {tomorrow}")
+    logger.info(f"Ukládám spotové ceny pro den {tomorrow}")
     
     try:
         records_updated = 0
@@ -69,20 +68,20 @@ def save_tomorrow_prices():
         
         #Nahrání do db
         conn.commit()
-        logger.info(f"Successfully saved {records_updated} price records for {tomorrow}")
+        logger.info(f"ÚSPĚŠNĚ ULOŽENO {records_updated} CENOVÝCH ZÁZNAMŮ PRO {tomorrow}")
         
     except KeyError as e:
-        logger.error(f"Unexpected API response format: {str(e)}")
+        logger.error(f"Neočekávaný formát API odpovědi: {str(e)}")
         conn.rollback()
     except psycopg2.Error as e:
         #Zrušení změn v případě chyby
-        logger.error(f"Database error: {str(e)}")
+        logger.error(f"Chyba databáze: {str(e)}")
         conn.rollback()
     finally:
         #Uzavření spojení
         cur.close()
         conn.close()
-        logger.debug("Database connection closed")
+        logger.debug("Připojení k databázi ukončeno")
 
 if __name__ == "__main__":
     save_tomorrow_prices()

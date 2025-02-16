@@ -93,13 +93,13 @@ def simulate_grid_charging():
                     # Maximální množství energie za minutu v kWh
                     max_charge_kwh = max_charging_power / 60
                     
-                    # Kolik musíme dobít
-                    needed_kwh = min_level_kwh - current_level
+                    # Kolik musíme dobít (započítáme ztráty z účinnosti)
+                    needed_kwh = (min_level_kwh - current_level) / (charging_eff / 100)
                     
                     # Kolik můžeme nabít tuto minutu
                     charge_amount = min(
                         max_charge_kwh,  # Limit nabíjení
-                        needed_kwh       # Kolik chybí do minima
+                        needed_kwh       # Kolik chybí do minima (včetně ztrát)
                     )
                     
                     # Aplikujeme účinnost nabíjení

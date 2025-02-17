@@ -22,48 +22,51 @@ const ApplianceList = ({ appliances, houseId, onSuccess, onDelete }: ApplianceLi
 
   if (appliances.length === 0) {
     return (
-      <div className="text-center p-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
-        <p className="text-gray-500 mb-4">
-          Zatím nejsou přidány žádné spotřebiče
-        </p>
-        <ApplianceDialog
-          houseId={houseId}
-          onSuccess={onSuccess}
-        />
-      </div>
+      <Card className="bg-white shadow-sm border border-gray-100">
+        <CardContent>
+          <div className="text-center p-8 bg-gray-50 rounded-lg border-2 border-dashed border-gray-200">
+            <p className="text-gray-500 mb-4">
+              Zatím nejsou přidány žádné spotřebiče
+            </p>
+            <ApplianceDialog
+              houseId={houseId}
+              onSuccess={onSuccess}
+            />
+          </div>
+        </CardContent>
+      </Card>
     );
   }
 
   return (
     <Card className="bg-white shadow-sm border border-gray-100">
-      <CardHeader>
-        <div className="flex items-center justify-between">
-          <CardTitle className="text-xl font-semibold text-gray-900">
-            Spotřebiče ({appliances.length})
-          </CardTitle>
-          <div className="flex gap-2">
-            <ApplianceDialog
-              houseId={houseId}
-              onSuccess={onSuccess}
-            />
-            <CollapsibleTrigger asChild>
-              <Button 
-                variant="ghost" 
-                size="icon"
-                onClick={() => setIsOpen(!isOpen)}
-              >
-                {isOpen ? (
-                  <ChevronUp className="h-4 w-4" />
-                ) : (
-                  <ChevronDown className="h-4 w-4" />
-                )}
-              </Button>
-            </CollapsibleTrigger>
-          </div>
-        </div>
-      </CardHeader>
-      
       <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+        <CardHeader>
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-xl font-semibold text-gray-900">
+              Spotřebiče ({appliances.length})
+            </CardTitle>
+            <div className="flex gap-2">
+              <ApplianceDialog
+                houseId={houseId}
+                onSuccess={onSuccess}
+              />
+              <CollapsibleTrigger asChild>
+                <Button 
+                  variant="ghost" 
+                  size="icon"
+                >
+                  {isOpen ? (
+                    <ChevronUp className="h-4 w-4" />
+                  ) : (
+                    <ChevronDown className="h-4 w-4" />
+                  )}
+                </Button>
+              </CollapsibleTrigger>
+            </div>
+          </div>
+        </CardHeader>
+        
         <CollapsibleContent>
           <CardContent>
             <div className="space-y-4">

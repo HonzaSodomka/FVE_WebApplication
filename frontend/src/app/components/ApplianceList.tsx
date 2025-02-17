@@ -30,7 +30,7 @@ const APPLIANCE_TYPES = [
     title: "Spotřeba na vyžádání",
     description: "Nepravidelné používání během dne"
   }
-];
+] as const;
 
 interface ApplianceListProps {
   appliances: Appliance[];
@@ -49,7 +49,7 @@ interface TypeSectionProps {
   onDelete: (id: number) => void;
 }
 
-const TypeSection = ({ 
+const TypeSection: React.FC<TypeSectionProps> = ({ 
   type, 
   title, 
   description, 
@@ -57,19 +57,19 @@ const TypeSection = ({
   houseId,
   onSuccess,
   onDelete 
-}: TypeSectionProps) => {
-  const [isOpen, setIsOpen] = React.useState(true);
+}) => {
+  const [isOpen, setIsOpen] = React.useState<boolean>(false);
   const appliancesOfType = appliances.filter((a: Appliance) => a.appliance_type === type);
 
   if (appliancesOfType.length === 0) return null;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200">
-      <div className="p-4">
-        <div 
-          className="flex items-center justify-between cursor-pointer"
-          onClick={() => setIsOpen(!isOpen)}
-        >
+      <div 
+        className="p-4 cursor-pointer"
+        onClick={() => setIsOpen(!isOpen)}
+      >
+        <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
               <h3 className="font-medium text-gray-900">{title}</h3>
@@ -79,7 +79,14 @@ const TypeSection = ({
             </div>
             <p className="text-sm text-gray-600">{description}</p>
           </div>
-          <Button variant="ghost" size="sm">
+          <Button 
+            variant="ghost" 
+            size="sm"
+            onClick={(e) => {
+              e.stopPropagation();
+              setIsOpen(!isOpen);
+            }}
+          >
             {isOpen ? (
               <ChevronUp className="h-4 w-4" />
             ) : (
@@ -88,7 +95,7 @@ const TypeSection = ({
           </Button>
         </div>
       </div>
-      <Collapsible open={isOpen} onOpenChange={setIsOpen}>
+      <Collapsible open={isOpen}>
         <CollapsibleContent>
           <div className="px-4 pb-4 border-t border-gray-100 pt-4">
             <div className="space-y-3">
@@ -102,8 +109,8 @@ const TypeSection = ({
                       {appliance.name}
                     </h4>
                     <p className="text-sm text-gray-600">
-                      Spotřeba: {appliance.power_consumption} W
-                      {appliance.standby_power && ` | Standby: ${appliance.standby_power} W`}
+                      Spotřeba: {appliance.power_consumption.toString()} W
+                      {appliance.standby_power ? ` | Standby: ${appliance.standby_power} W` : ''}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -131,7 +138,12 @@ const TypeSection = ({
   );
 };
 
-const ApplianceList = ({ appliances, houseId, onSuccess, onDelete }: ApplianceListProps) => {
+const ApplianceList: React.FC<ApplianceListProps> = ({ 
+  appliances, 
+  houseId, 
+  onSuccess, 
+  onDelete 
+}) => {
   if (appliances.length === 0) {
     return (
       <Card className="bg-white shadow-sm border border-gray-100">

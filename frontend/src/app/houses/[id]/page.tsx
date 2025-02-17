@@ -3,7 +3,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { ArrowLeft, Trash2, Power } from "lucide-react";
+import { ArrowLeft, Power } from "lucide-react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { format } from "date-fns";

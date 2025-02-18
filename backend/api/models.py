@@ -1,5 +1,6 @@
 from django.db import models
 from datetime import date
+from django.core.validators import MinValueValidator, MaxValueValidator
 
 class PriceData(models.Model):
     date = models.DateField()
@@ -323,3 +324,25 @@ class ChargingData(models.Model):
 
     def __str__(self):
         return f"{self.house.name} - {self.date}: Solar {self.solar_charged_kwh:.1f}kWh, Grid {self.grid_charged_kwh:.1f}kWh ({self.grid_charged_cost:.0f}Kč)"
+    
+class ChargingSchedule(models.Model):
+    house = models.ForeignKey(
+        'House',
+        on_delete=models.CASCADE,
+        related_name='charging_schedules',
+        verbose_name="Plán nabíjení"
+    )
+    date = models.DateField()
+    hour = models.IntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(23)]
+    )
+    planned_charging_kwh = models.FloatField(
+        validators=[MinValueValidator(0)]
+    )
+
+    class Meta:
+        unique_together = ['house', 'date', 'hour']
+        indexes = [
+            models.Index(fields=['house', 'date', 'hour']),
+        ]
+        ordering = ['date', 'hour']

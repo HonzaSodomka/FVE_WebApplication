@@ -22,68 +22,78 @@ def get_historical_consumption(house_id, conn, cur, days_back=30):
     try:
         end_date = date.today()
         start_date = end_date - timedelta(days=days_back)
+
+        # Nejdřív logujem víkendy
+        cur.execute("""
+            SELECT DISTINCT date, EXTRACT(DOW FROM date) as dow
+            FROM api_consumptiondata
+            WHERE house_id = %s 
+                AND date BETWEEN %s AND %s
+                AND EXTRACT(DOW FROM date) IN (0, 6)
+            ORDER BY date
+        """, (house_id, start_date, end_date))
         
-        # Specificky pro 23. hodinu o víkendech
+        weekends = cur.fetchall()
+        logger.info(f"""
+        NALEZENÉ VÍKENDY:
+        {chr(10).join(f'Datum: {date}, Den v týdnu: {int(dow)} ({"Neděle" if int(dow) == 0 else "Sobota"})' for date, dow in weekends)}
+        """)
+        
+        # Pak stejný dotaz jako předtím
         cur.execute("""
             WITH hourly_sums AS (
                 SELECT 
                     date,
                     CAST(SUBSTRING(time FROM 1 FOR 2) AS INTEGER) as hour,
-                    EXTRACT(DOW FROM date) as day_of_week,
-                    (SELECT SUM(CAST(item->>'consumption_w' AS FLOAT)) 
-                    FROM jsonb_array_elements(appliance_consumption) item) as hour_consumption
+                    SUM(
+                        (SELECT SUM(CAST(item->>'consumption_w' AS FLOAT)) 
+                        FROM jsonb_array_elements(appliance_consumption) item)
+                    ) as hour_consumption
                 FROM api_consumptiondata
-                WHERE 
-                    house_id = %s 
-                    AND date BETWEEN %s AND %s
-                    AND CAST(SUBSTRING(time FROM 1 FOR 2) AS INTEGER) = 23
-                    AND EXTRACT(DOW FROM date) >= 5  -- Víkend (5 = sobota, 6 = neděle)
+                WHERE house_id = %s AND date BETWEEN %s AND %s
+                GROUP BY date, CAST(SUBSTRING(time FROM 1 FOR 2) AS INTEGER)
             )
             SELECT 
-                date, 
-                day_of_week, 
+                hour,
+                EXTRACT(DOW FROM date) NOT IN (0, 6) as is_weekday,
                 hour_consumption
             FROM hourly_sums
-            ORDER BY date
+            ORDER BY hour, date
         """, (house_id, start_date, end_date))
         
         records = cur.fetchall()
         
-        # Příprava pro výpis
-        weekend_consumption = []
-        for record in records:
-            date_val, day_of_week, consumption = record
-            weekend_consumption.append({
-                'date': date_val,
-                'day_of_week': 'Sobota' if day_of_week == 5 else 'Neděle',
-                'consumption': consumption
-            })
+        weekday_data = {hour: [] for hour in range(24)}
+        weekend_data = {hour: [] for hour in range(24)}
         
-        # Výpočet průměru
-        if weekend_consumption:
-            average_consumption = sum(
-                record['consumption'] for record in weekend_consumption
-            ) / len(weekend_consumption)
-        else:
-            average_consumption = 0
+        for hour, is_weekday, consumption in records:
+            if is_weekday:
+                weekday_data[hour].append(consumption)
+            else:
+                weekend_data[hour].append(consumption)
+
+        weekday_profile = {
+            hour: (mean(consumptions) if consumptions else 0)
+            for hour, consumptions in weekday_data.items()
+        }
         
-        # Detailed logging
+        weekend_profile = {
+            hour: (mean(consumptions) if consumptions else 0)
+            for hour, consumptions in weekend_data.items()
+        }
+
         logger.info(f"""
-        ANALÝZA SPOTŘEBY PRO DŮM {house_id} - 23. HODINA O VÍKENDECH:
+        HISTORICKÁ ANALÝZA DOMU {house_id}:
+        Období: {start_date} až {end_date}
         
-        Analyzované období: {start_date} až {end_date}
-        Počet nalezených záznamů: {len(weekend_consumption)}
+        VŠEDNÍ DNY (průměrná spotřeba Wh):
+        {chr(10).join(f'{str(hour).zfill(2)}:00 - {weekday_profile[hour]:6.1f} Wh' for hour in range(24))}
         
-        JEDNOTLIVÉ ZÁZNAMY:
-        {chr(10).join(
-            f"{record['date']} ({record['day_of_week']}): {record['consumption']:.2f} Wh" 
-            for record in weekend_consumption
-        )}
-        
-        PRŮMĚRNÁ SPOTŘEBA: {average_consumption:.2f} Wh
+        VÍKENDY (průměrná spotřeba Wh):
+        {chr(10).join(f'{str(hour).zfill(2)}:00 - {weekend_profile[hour]:6.1f} Wh' for hour in range(24))}
         """)
         
-        return weekend_consumption, average_consumption
+        return weekday_profile, weekend_profile
 
     except Exception as e:
         logger.error(f"Chyba při analýze historické spotřeby pro dům {house_id}: {str(e)}")
@@ -92,6 +102,7 @@ def get_historical_consumption(house_id, conn, cur, days_back=30):
 def plan_charging():
     """
     Hlavní funkce pro plánování nabíjení.
+    Spouští se v 17:01 když máme data o cenách na další den.
     """
     try:
         logger.info("ZAČÁTEK PLÁNOVÁNÍ NABÍJENÍ")
@@ -116,8 +127,10 @@ def plan_charging():
         # Pro každý aktivní dům uděláme analýzu
         for (house_id,) in houses:
             try:
-                # Zavolání funkce pro analýzu spotřeby
-                weekend_consumption, average_consumption = get_historical_consumption(house_id, conn, cur)
+                weekday_profile, weekend_profile = get_historical_consumption(house_id, conn, cur)
+                
+                # TODO: Tady budeme pokračovat s plánováním nabíjení
+                # pro každý dům na základě získaných profilů
                 
             except Exception as e:
                 logger.error(f"Chyba při zpracování domu {house_id}: {str(e)}")

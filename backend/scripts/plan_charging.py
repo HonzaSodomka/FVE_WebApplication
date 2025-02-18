@@ -1,3 +1,6 @@
+#!/usr/bin/env python
+# backend/scripts/plan_charging.py
+
 from datetime import date, timedelta
 from statistics import mean
 import psycopg2
@@ -20,32 +23,43 @@ def get_historical_consumption(house_id, conn, cur, days_back=30):
         end_date = date.today()
         start_date = end_date - timedelta(days=days_back)
         
-        weekday_data = {hour: [] for hour in range(24)}
-        weekend_data = {hour: [] for hour in range(24)}
-
-        # Upravený dotaz pro seskupení minut do hodin
+        # Pro každou hodinu nejdřív spočítáme součty za jednotlivé dny
         cur.execute("""
+            WITH hourly_sums AS (
+                -- Pro každý den a hodinu sečteme minutové spotřeby
+                SELECT 
+                    date,
+                    CAST(SUBSTRING(time FROM 1 FOR 2) AS INTEGER) as hour,
+                    SUM(
+                        (SELECT SUM(CAST(item->>'consumption_w' AS FLOAT)) 
+                        FROM jsonb_array_elements(appliance_consumption) item)
+                    ) as hour_consumption
+                FROM api_consumptiondata
+                WHERE house_id = %s AND date BETWEEN %s AND %s
+                GROUP BY date, CAST(SUBSTRING(time FROM 1 FOR 2) AS INTEGER)
+            )
+            -- Pro každou hodinu vrátíme seznam denních součtů
             SELECT 
-                date,
-                CAST(SUBSTRING(time FROM 1 FOR 2) AS INTEGER) as hour,
-                SUM(
-                    (SELECT SUM(CAST(item->>'consumption_w' AS FLOAT)) 
-                    FROM jsonb_array_elements(appliance_consumption) item)
-                ) * 60 as consumption_wh  -- Násobíme 60 protože hodnoty jsou za minutu
-            FROM api_consumptiondata
-            WHERE house_id = %s AND date BETWEEN %s AND %s
-            GROUP BY date, CAST(SUBSTRING(time FROM 1 FOR 2) AS INTEGER)
-            ORDER BY date, hour
+                hour,
+                EXTRACT(DOW FROM date) < 5 as is_weekday,
+                hour_consumption
+            FROM hourly_sums
+            ORDER BY hour, date
         """, (house_id, start_date, end_date))
         
         records = cur.fetchall()
         
-        for record_date, hour, consumption in records:
-            if record_date.weekday() < 5:  # Pondělí-Pátek
+        # Rozdělíme data na všední dny a víkendy
+        weekday_data = {hour: [] for hour in range(24)}
+        weekend_data = {hour: [] for hour in range(24)}
+        
+        for hour, is_weekday, consumption in records:
+            if is_weekday:
                 weekday_data[hour].append(consumption)
-            else:  # Sobota-Neděle
+            else:
                 weekend_data[hour].append(consumption)
 
+        # Spočítáme průměry pro každou hodinu
         weekday_profile = {
             hour: (mean(consumptions) if consumptions else 0)
             for hour, consumptions in weekday_data.items()

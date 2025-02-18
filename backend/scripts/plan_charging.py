@@ -1,6 +1,3 @@
-#!/usr/bin/env python
-# backend/scripts/plan_charging.py
-
 from datetime import date, timedelta
 from statistics import mean
 import psycopg2
@@ -26,11 +23,19 @@ def get_historical_consumption(house_id, conn, cur, days_back=30):
         weekday_data = {hour: [] for hour in range(24)}
         weekend_data = {hour: [] for hour in range(24)}
 
+        # Upraveno: používáme time místo hour a extrahujeme hodinu z času
         cur.execute("""
-            SELECT date, hour, consumption_wh
+            SELECT date, CAST(SUBSTRING(time FROM 1 FOR 2) AS INTEGER) as hour, 
+                   SUM(CASE 
+                       WHEN appliance_consumption IS NOT NULL 
+                       THEN (SELECT SUM(CAST(item->>'consumption_w' AS FLOAT)) 
+                            FROM jsonb_array_elements(appliance_consumption) item)
+                       ELSE 0 
+                       END) as consumption_wh
             FROM api_consumptiondata
             WHERE house_id = %s AND date BETWEEN %s AND %s
-            ORDER BY date, hour
+            GROUP BY date, time
+            ORDER BY date, time
         """, (house_id, start_date, end_date))
         
         records = cur.fetchall()

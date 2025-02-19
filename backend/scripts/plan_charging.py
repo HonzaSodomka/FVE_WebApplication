@@ -1,7 +1,7 @@
 #!/usr/bin/env python
 # backend/scripts/plan_charging.py
 
-from datetime import date, timedelta
+from datetime import date, timedelta, datetime
 from statistics import mean
 import psycopg2
 import logging
@@ -169,17 +169,98 @@ def get_house_params(house_id, conn, cur):
             'risk_level': risk_level                     # LOW/MEDIUM/HIGH
         }
         
-        logger.info(f"""
-        Parametry domu {house_id}:
-        - Baterie: {current_level:.1f}/{battery_capacity:.1f} kWh (min {min_level}%)
-        - Nabíjení: max {max_charging:.1f} kW, účinnost {efficiency}%
-        - Risk level: {risk_level}
-        """)
-        
         return params
 
     except Exception as e:
         logger.error(f"Chyba při načítání parametrů domu {house_id}: {str(e)}")
+        raise
+
+def simulate_battery_levels(
+    current_level,          # Aktuální stav baterie v kWh
+    consumption_profile,    # Očekávaná spotřeba {hodina: wh}
+    solar_prediction,       # Predikce výroby {hodina: wh}
+    current_hour,          # Aktuální hodina (např. 17 pro 17:01)
+    params                  # Parametry domu (kapacita, min_level atd)
+):
+    """
+    Simuluje průběh stavu baterie od aktuální hodiny do konce zítřka.
+    """
+    try:
+        logger.info(f"ZAČÁTEK SIMULACE: Aktuální čas {current_hour}:00, baterie {current_level:.2f} kWh")
+        
+        battery_level = current_level
+        min_level_kwh = params['battery_capacity'] * (params['min_level'] / 100)
+
+        # Simulace do konce dneška
+        for hour in range(current_hour, 24):
+            consumption = consumption_profile.get(hour, 0) / 1000  # Wh -> kWh
+            production = solar_prediction.get(hour, 0) / 1000      # Wh -> kWh
+            
+            prev_level = battery_level
+            battery_level = min(
+                params['battery_capacity'],
+                max(0, battery_level - consumption + production)
+            )
+            
+            logger.info(f"""
+            DNES {hour}:00:
+            Baterie: {prev_level:.2f} kWh -> {battery_level:.2f} kWh
+            Spotřeba: -{consumption:.2f} kWh
+            Výroba: +{production:.2f} kWh
+            """)
+
+        # Simulace celého zítřka
+        for hour in range(24):
+            consumption = consumption_profile.get(hour, 0) / 1000  # Wh -> kWh
+            production = solar_prediction.get(hour, 0) / 1000      # Wh -> kWh
+            
+            prev_level = battery_level
+            battery_level = min(
+                params['battery_capacity'],
+                max(0, battery_level - consumption + production)
+            )
+            
+            logger.info(f"""
+            ZÍTRA {hour}:00:
+            Baterie: {prev_level:.2f} kWh -> {battery_level:.2f} kWh
+            Spotřeba: -{consumption:.2f} kWh
+            Výroba: +{production:.2f} kWh
+            {'!!! POD MINIMUM !!!' if battery_level < min_level_kwh else ''}
+            """)
+            
+        return battery_level
+
+    except Exception as e:
+        logger.error(f"Chyba při simulaci stavu baterie: {str(e)}")
+        raise
+
+def calculate_charging_plan(
+    prices,                  # Spotové ceny {hodina: cena}
+    consumption_profile,     # Očekávaná spotřeba {hodina: wh}
+    solar_prediction,        # Predikce výroby {hodina: wh}
+    params,                  # Parametry domu (baterie, nabíjení, risk)
+    target_date             # Datum pro který plánujeme
+):
+    """
+    Naplánuje nabíjení pro jeden dům na jeden den.
+    """
+    try:
+        current_hour = datetime.now().hour
+        
+        final_level = simulate_battery_levels(
+            current_level=params['current_level'],
+            consumption_profile=consumption_profile,
+            solar_prediction=solar_prediction,
+            current_hour=current_hour,
+            params=params
+        )
+        
+        logger.info(f"KONEC SIMULACE: Konečný stav baterie: {final_level:.2f} kWh")
+        
+        # TODO: Na základě simulace rozhodnout kde nabíjet
+        
+    except Exception as e:
+        logger.error(f"Chyba při výpočtu nabíjecího plánu: {str(e)}")
         raise
 
 def plan_charging():
@@ -203,10 +284,6 @@ def plan_charging():
 
         # Načteme spotové ceny na zítřek (společné pro všechny domy)
         prices = get_spot_prices(tomorrow, conn, cur)
-        logger.info(f"""
-        SPOTOVÉ CENY:
-        {chr(10).join(f'{str(hour).zfill(2)}:00 - {price:.2f} Kč/MWh' for hour, price in sorted(prices.items()))}
-        """)
 
         cur.execute("SELECT id FROM api_house WHERE is_active = true")
         houses = cur.fetchall()
@@ -218,33 +295,20 @@ def plan_charging():
                 
                 # Načtení všech potřebných dat
                 params = get_house_params(house_id, conn, cur)
-                logger.info(f"""
-                PARAMETRY DOMU:
-                - Baterie: {params['current_level']:.1f}/{params['battery_capacity']:.1f} kWh
-                - Min. úroveň: {params['min_level']}%
-                - Max. nabíjení: {params['max_charging_power']} kW
-                - Účinnost: {params['charging_efficiency']}%
-                - Risk level: {params['risk_level']}
-                """)
-                
                 weekday_profile, weekend_profile = get_historical_consumption(house_id, conn, cur)
                 profile = weekend_profile if is_weekend else weekday_profile
-                logger.info(f"""
-                OČEKÁVANÁ SPOTŘEBA:
-                {chr(10).join(f'{str(hour).zfill(2)}:00 - {consumption:.1f} Wh' for hour, consumption in sorted(profile.items()))}
-                """)
-                
                 solar_prediction = get_solar_prediction(house_id, tomorrow, conn, cur)
-                logger.info(f"""
-                PREDIKCE VÝROBY:
-                {chr(10).join(f'{str(hour).zfill(2)}:00 - {wh:.1f} Wh' for hour, wh in sorted(solar_prediction.items()))}
-                """)
-
-                # Výpis bilance (spotřeba - výroba) pro každou hodinu
-                logger.info(f"""
-                BILANCE (spotřeba - výroba):
-                {chr(10).join(f'{str(hour).zfill(2)}:00 - {profile[hour] - solar_prediction.get(hour, 0):.1f} Wh' for hour in range(24))}
-                """)
+                
+                # Výpočet plánu nabíjení
+                plan = calculate_charging_plan(
+                    prices=prices,
+                    consumption_profile=profile,
+                    solar_prediction=solar_prediction,
+                    params=params,
+                    target_date=tomorrow
+                )
+                
+                # TODO: Uložit plán do ChargingSchedule
                 
             except Exception as e:
                 logger.error(f"Chyba při zpracování domu {house_id}: {str(e)}")

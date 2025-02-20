@@ -189,13 +189,15 @@ def get_solar_prediction(house_power, solar_variation=1.0):
 
         # Získání predikcí pro zbytek dneška a celý zítřek
         cur.execute("""
-            SELECT DATE(timestamp), 
-                   EXTRACT(HOUR FROM timestamp)::integer as hour,
-                   watt_hours_period
+            SELECT 
+                DATE(timestamp), 
+                EXTRACT(HOUR FROM timestamp)::integer as hour,
+                SUM(watt_hours_period) as watt_hours_period
             FROM api_solardata 
             WHERE (DATE(timestamp) = %s AND EXTRACT(HOUR FROM timestamp) >= %s) 
                OR DATE(timestamp) = %s
-            ORDER BY timestamp
+            GROUP BY DATE(timestamp), EXTRACT(HOUR FROM timestamp)
+            ORDER BY DATE(timestamp), hour
         """, [today, current_hour, tomorrow])
         
         production = {}
@@ -209,8 +211,8 @@ def get_solar_prediction(house_power, solar_variation=1.0):
             if date_str not in production:
                 production[date_str] = {}
                 
-            # Přepočet na kWh a aplikace variace
-            production[date_str][hour] = (wh * power_ratio * solar_variation) / 1000
+            # Aplikace přepočtu výkonu a variace
+            production[date_str][hour] = wh * power_ratio * solar_variation
         
         logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Načteno {len(rows)} záznamů pro {house_power}kWp")
         

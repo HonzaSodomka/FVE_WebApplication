@@ -280,10 +280,11 @@ if __name__ == "__main__":
                     print(f"  {key}: {value}")
                 
                 print("\nPredikce solární výroby:")
-                for date in solar_prediction:
+                for date in sorted(solar_prediction.keys()):
                     print(f"\n{date}:")
-                    for hour, kwh in solar_prediction[date].items():
-                        print(f"  {hour}:00 - {kwh:.2f} kWh")
+                    for hour in sorted(solar_prediction[date].keys()):
+                        wh = solar_prediction[date][hour]
+                        print(f"  {hour:02d}:00 - {wh:.2f} Wh")
                         
     except Exception as e:
         print(f"Chyba: {str(e)}")

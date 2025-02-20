@@ -346,3 +346,25 @@ class ChargingSchedule(models.Model):
             models.Index(fields=['house', 'date', 'hour']),
         ]
         ordering = ['date', 'hour']
+
+class BatteryPrediction(models.Model):
+    house = models.ForeignKey(
+        'House',
+        on_delete=models.CASCADE,
+        related_name='battery_predictions'
+    )
+    date = models.DateField()
+    hour = models.IntegerField(
+        validators=[MinValueValidator(0), MaxValueValidator(23)]
+    )
+    
+    predicted_charging = models.FloatField()     # kWh (kolik by mělo přibýt)
+    predicted_discharging = models.FloatField()  # kWh (kolik by mělo ubýt)
+    predicted_level = models.FloatField()        # kWh (předpokládaný stav)
+
+    class Meta:
+        unique_together = ['house', 'date', 'hour']
+        indexes = [
+            models.Index(fields=['house', 'date', 'hour']),
+        ]
+        ordering = ['date', 'hour']

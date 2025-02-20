@@ -161,28 +161,127 @@ def get_house_data(house_id):
         if 'conn' in locals():
             conn.close()
 
+def get_solar_prediction(house_power, solar_variation=1.0):
+    """
+    Získá predikci solární výroby na zbytek dne a další den.
+    Přepočítá predikci podle instalovaného výkonu domu.
+    
+    Args:
+        house_power (float): Instalovaný výkon solárů domu v kWp
+        solar_variation (float): Variace výkonu (defaultně 1.0)
+        
+    Returns:
+        dict: Předpověď výroby {datum: {hodina: výroba_kwh}}
+    """
+    try:
+        conn = psycopg2.connect(
+            dbname="fve_db",
+            user="postgres",
+            password="heslo",
+            host="db"
+        )
+        cur = conn.cursor()
+        
+        current_time = datetime.now()
+        today = current_time.date()
+        tomorrow = today + timedelta(days=1)
+        current_hour = current_time.hour
+
+        # Získání predikcí pro zbytek dneška a celý zítřek
+        cur.execute("""
+            SELECT DATE(timestamp), 
+                   EXTRACT(HOUR FROM timestamp)::integer as hour,
+                   watt_hours_period
+            FROM api_solardata 
+            WHERE (DATE(timestamp) = %s AND EXTRACT(HOUR FROM timestamp) >= %s) 
+               OR DATE(timestamp) = %s
+            ORDER BY timestamp
+        """, [today, current_hour, tomorrow])
+        
+        production = {}
+        rows = cur.fetchall()
+        
+        # Přepočet podle výkonu domu (predikce jsou pro 20kWp)
+        power_ratio = house_power / 20
+        
+        for date, hour, wh in rows:
+            date_str = date.strftime('%Y-%m-%d')
+            if date_str not in production:
+                production[date_str] = {}
+                
+            # Přepočet na kWh a aplikace variace
+            production[date_str][hour] = (wh * power_ratio * solar_variation) / 1000
+        
+        logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Načteno {len(rows)} záznamů pro {house_power}kWp")
+        
+        if not rows:
+            logger.warning("NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Žádné záznamy nenalezeny")
+        
+        return production
+        
+    except Exception as e:
+        logger.error(f"CHYBA PŘI NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: {str(e)}")
+        raise
+        
+    finally:
+        if 'cur' in locals():
+            cur.close()
+        if 'conn' in locals():
+            conn.close()
+
+def predict_battery_state(house_id):
+    """
+    Předpoví stav baterie pro následující hodiny.
+    Zatím pouze se solární predikcí, bez započítání spotřeby.
+    
+    Args:
+        house_id: ID domu
+    """
+    try:
+        # Získání dat o domu
+        house_data = get_house_data(house_id)
+        if not house_data:
+            logger.error(f"PREDIKCE STAVU BATERIE: Dům {house_id} nenalezen")
+            return None
+            
+        # Získání solární predikce
+        solar_prediction = get_solar_prediction(
+            house_data['solar_power']
+        )
+        
+        # Zde budeme dále implementovat výpočet stavu baterie
+        logger.info(f"PREDIKCE STAVU BATERIE: Data načtena pro dům {house_id}")
+        
+        return {
+            'house_data': house_data,
+            'solar_prediction': solar_prediction
+        }
+        
+    except Exception as e:
+        logger.error(f"CHYBA PŘI PREDIKCI STAVU BATERIE: {str(e)}")
+        raise
+
 if __name__ == "__main__":
     try:
-        # Načtení obecných dat
         active_houses = get_active_houses()
-        price_data = get_price_data()
-        
         print("\nAktivní domy:", active_houses)
-        print("\nCenová data:")
-        for date in price_data:
-            print(f"\nDatum: {date}")
-            for hour, price in price_data[date].items():
-                print(f"  {hour}:00 - {price:.2f} Kč/kWh")
         
-        # Zpracování jednotlivých domů
         for house_id in active_houses:
-            print(f"\nZpracovávám dům {house_id}")
-            house_data = get_house_data(house_id)
-            if house_data:
-                print(f"Data domu {house_id}:")
+            print(f"\nPredikce pro dům {house_id}:")
+            prediction = predict_battery_state(house_id)
+            if prediction:
+                house_data = prediction['house_data']
+                solar_prediction = prediction['solar_prediction']
+                
+                print("\nData domu:")
                 for key, value in house_data.items():
                     print(f"  {key}: {value}")
-                    
+                
+                print("\nPredikce solární výroby:")
+                for date in solar_prediction:
+                    print(f"\n{date}:")
+                    for hour, kwh in solar_prediction[date].items():
+                        print(f"  {hour}:00 - {kwh:.2f} kWh")
+                        
     except Exception as e:
-        logger.error(f"CHYBA PŘI SPUŠTĚNÍ SKRIPTU: {str(e)}")
         print(f"Chyba: {str(e)}")

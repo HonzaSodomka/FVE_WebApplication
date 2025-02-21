@@ -262,17 +262,23 @@ def get_consumption_prediction(house_id):
         
         # SQL dotaz pro získání součtů po hodinách, rozděleno na víkendy a všední dny
         cur.execute("""
-            WITH hourly_consumption AS (
+            WITH consumption_items AS (
+                SELECT 
+                    date,
+                    time,
+                    (items->>'consumption_w')::float as consumption_w
+                FROM api_consumptiondata,
+                LATERAL jsonb_array_elements(appliance_consumption) items
+                WHERE house_id = %s 
+                    AND date >= %s
+            ),
+            hourly_consumption AS (
                 SELECT 
                     date,
                     EXTRACT(HOUR FROM time::time) as hour,
                     EXTRACT(DOW FROM date) as day_of_week,
-                    SUM(
-                        (jsonb_array_elements(appliance_consumption)->>'consumption_w')::float
-                    ) as total_wh
-                FROM api_consumptiondata
-                WHERE house_id = %s 
-                    AND date >= %s
+                    SUM(consumption_w) as total_wh
+                FROM consumption_items
                 GROUP BY date, EXTRACT(HOUR FROM time::time)
                 ORDER BY date, hour
             )

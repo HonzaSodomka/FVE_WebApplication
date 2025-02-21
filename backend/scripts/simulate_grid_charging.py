@@ -144,4 +144,4 @@ def simulate_grid_charging():
             conn.close()
 
 if __name__ == "__main__":
-    simulate_grid_charging()
+    simulate_grid_charging() 

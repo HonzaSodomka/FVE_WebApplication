@@ -171,7 +171,7 @@ def get_solar_prediction(house_power, solar_variation=1.0):
         solar_variation (float): Variace výkonu (defaultně 1.0)
         
     Returns:
-        dict: Předpověď výroby {datum: {hodina: výroba_kwh}}
+        dict: Předpověď výroby {datum: {hodina: výroba_wh}}
     """
     try:
         conn = psycopg2.connect(
@@ -189,15 +189,11 @@ def get_solar_prediction(house_power, solar_variation=1.0):
 
         # Získání predikcí pro zbytek dneška a celý zítřek
         cur.execute("""
-            SELECT 
-                DATE(timestamp), 
-                EXTRACT(HOUR FROM timestamp)::integer as hour,
-                SUM(watt_hours_period) as watt_hours_period
+            SELECT timestamp, watt_hours_period
             FROM api_solardata 
             WHERE (DATE(timestamp) = %s AND EXTRACT(HOUR FROM timestamp) >= %s) 
                OR DATE(timestamp) = %s
-            GROUP BY DATE(timestamp), EXTRACT(HOUR FROM timestamp)
-            ORDER BY DATE(timestamp), hour
+            ORDER BY timestamp
         """, [today, current_hour, tomorrow])
         
         production = {}
@@ -206,12 +202,18 @@ def get_solar_prediction(house_power, solar_variation=1.0):
         # Přepočet podle výkonu domu (predikce jsou pro 20kWp)
         power_ratio = house_power / 20
         
-        for date, hour, wh in rows:
-            date_str = date.strftime('%Y-%m-%d')
+        for timestamp, wh in rows:
+            date_str = timestamp.strftime('%Y-%m-%d')
+            minutes = timestamp.minute
+            
             if date_str not in production:
                 production[date_str] = {}
-                
-            # Aplikace přepočtu výkonu a variace
+            
+            # Pokud čas končí :00, použijeme aktuální hodinu
+            # Jinak použijeme následující hodinu
+            hour = timestamp.hour if minutes == 0 else timestamp.hour + 1
+            
+            # Přepočet a aplikace variace
             production[date_str][hour] = wh * power_ratio * solar_variation
         
         logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Načteno {len(rows)} záznamů pro {house_power}kWp")

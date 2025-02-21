@@ -8,8 +8,7 @@ services:
         - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://bijec.nti.tul.cz}
         - NODE_OPTIONS="--max-old-space-size=2048"  # Zvýšení limitu paměti pro Node.js
     ports:
-      - "127.0.0.1:3000:3000"      # IPv4
-      - "[::1]:3000:3000"          # IPv6
+      - "127.0.0.1:3000:3000"  # Mapování portu hosta na port kontejneru - omezeno na localhost
     environment: 
       - NODE_ENV=${NODE_ENV:-production}
       - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://bijec.nti.tul.cz}
@@ -24,8 +23,7 @@ services:
   backend:
     build: ./backend  # Cesta k backend Dockerfile
     ports:
-      - "127.0.0.1:8000:8000"      # IPv4
-      - "[::1]:8000:8000"          # IPv6
+      - "127.0.0.1:8000:8000"  # Mapování portu pro API - omezeno na localhost
     depends_on:  # Čeká na "zdravý" stav databáze
       db:
         condition: service_healthy
@@ -45,8 +43,7 @@ services:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=heslo
     ports:
-      - "127.0.0.1:5432:5432"      # IPv4
-      - "[::1]:5432:5432"          # IPv6
+      - "127.0.0.1:5432:5432"  # Omezeno na localhost
     healthcheck:  # Kontrola "zdraví" databáze
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -57,8 +54,7 @@ services:
   adminer:
     image: adminer:latest
     ports:
-      - "127.0.0.1:8080:8080"      # IPv4
-      - "[::1]:8080:8080"          # IPv6
+      - "127.0.0.1:8080:8080"  # Webové rozhraní pro správu DB - omezeno na localhost
     depends_on:
       - db
 

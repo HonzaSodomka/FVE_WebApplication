@@ -271,7 +271,9 @@ def calculate_battery_levels(current_level, solar_prediction, consumption_predic
     for date in sorted(solar_prediction.keys()):
         battery_levels[date] = {}
         
-        for hour in sorted(solar_prediction[date].keys()):
+        # Pro každou hodinu 0-23
+        for hour in range(24):
+            # Přeskočit už uplynulé hodiny (kromě aktuální)
             if date == current_time.date().strftime('%Y-%m-%d') and hour < current_time.hour:
                 continue
                 
@@ -279,11 +281,18 @@ def calculate_battery_levels(current_level, solar_prediction, consumption_predic
             consumption = consumption_prediction[day_type].get(hour, 0)
             production = solar_prediction[date].get(hour, 0)
             
-            delta = (production - consumption) / 1000
+            # Změna stavu baterie (ve Wh)
+            delta = (production - consumption) / 1000  # převod na kWh
             new_level = current_level + delta
             new_level = max(0, min(new_level, battery_capacity))
             
-            battery_levels[date][hour] = new_level
+            # Uložíme původní i nový stav plus změnu
+            battery_levels[date][hour] = {
+                'original_level': current_level,
+                'new_level': new_level,
+                'delta': delta
+            }
+            
             current_level = new_level
             
         logger.info(f"VÝPOČET STAVU BATERIE: Vypočteno {len(battery_levels[date])} hodin pro {date}")
@@ -349,17 +358,20 @@ if __name__ == "__main__":
                 print("\nPredikce pro jednotlivé hodiny:")
                 for date in sorted(battery_levels.keys()):
                     print(f"\n{date}:")
-                    for hour in sorted(battery_levels[date].keys()):
-                        battery_level = battery_levels[date][hour]
-                        solar = solar_prediction[date].get(hour, 0)
-                        
-                        day = datetime.strptime(date, '%Y-%m-%d')
-                        is_weekend = day.weekday() >= 5
-                        consumption = consumption_prediction['weekend' if is_weekend else 'weekday'].get(hour, 0)
-                        
-                        print(f"  {hour:02d}:00 - Baterie: {battery_level:.2f} kWh, "
-                              f"Výroba: {solar:.2f} Wh, "
-                              f"Spotřeba: {consumption:.2f} Wh")
+                    for hour in range(24):
+                        if hour in battery_levels[date]:
+                            battery_state = battery_levels[date][hour]
+                            solar = solar_prediction[date].get(hour, 0)
+                            
+                            day = datetime.strptime(date, '%Y-%m-%d')
+                            is_weekend = day.weekday() >= 5
+                            consumption = consumption_prediction['weekend' if is_weekend else 'weekday'].get(hour, 0)
+                            
+                            print(f"  {hour:02d}:00 - "
+                                  f"Baterie: {battery_state['original_level']:.2f} -> {battery_state['new_level']:.2f} kWh "
+                                  f"(Δ {battery_state['delta']:+.2f} kWh), "
+                                  f"Výroba: {solar:.2f} Wh, "
+                                  f"Spotřeba: {consumption:.2f} Wh")
                         
     except Exception as e:
         print(f"Chyba: {str(e)}")

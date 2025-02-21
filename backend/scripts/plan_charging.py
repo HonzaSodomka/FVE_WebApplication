@@ -374,4 +374,4 @@ if __name__ == "__main__":
                                   f"Spotřeba: {consumption:.2f} Wh")
                         
     except Exception as e:
-        print(f"Chyba: {str(e)}")
+        print(f"Chyba: {str(e)}") 

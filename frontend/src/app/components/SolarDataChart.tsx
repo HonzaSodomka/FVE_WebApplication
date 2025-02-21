@@ -42,7 +42,7 @@ export default function SolarDataChart({ date }: { date: Date }) {
         const response = await fetch(
           `${API_URL}/api/solar_prediction/?date=${formattedDate}&power=${power}`,
           {
-            credentials: "include"
+            credentials: "include",
           }
         );
         const data = await response.json();
@@ -69,8 +69,10 @@ export default function SolarDataChart({ date }: { date: Date }) {
 
         data.predictions.forEach((item: SolarData) => {
           const hour = new Date(item.timestamp).getHours();
-          processedData[hour] = {
-            hour: `${String(hour).padStart(2, "0")}:00`,
+          const targetHour =
+            item.timestamp.slice(14, 16) === "00" ? hour : hour + 1;
+          processedData[targetHour] = {
+            hour: `${String(targetHour).padStart(2, "0")}:00`,
             watts: item.watts / 1000,
             wattHoursPeriod: item.watt_hours_period / 1000,
           };
@@ -129,7 +131,9 @@ export default function SolarDataChart({ date }: { date: Date }) {
             </p>
           </div>
           <div className="px-3 py-1 bg-white rounded-lg border border-gray-200">
-            <span className="text-lg font-semibold text-green-600">{sliderValue}</span>
+            <span className="text-lg font-semibold text-green-600">
+              {sliderValue}
+            </span>
             <span className="ml-1 text-sm text-gray-600">kWp</span>
           </div>
         </div>

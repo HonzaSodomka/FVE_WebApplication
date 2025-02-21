@@ -67,11 +67,15 @@ def get_price_data():
         prices = {}
         rows = cur.fetchall()
         
+        # Přidáme výpis hodin a cen
+        print("Ceny elektřiny:")
         for date, hour, price in rows:
             date_str = date.strftime('%Y-%m-%d')
             if date_str not in prices:
                 prices[date_str] = {}
             prices[date_str][hour] = price / 1000  # Převod z Kč/MWh na Kč/kWh
+            
+            print(f"{date_str} {hour:02d}:00 - {prices[date_str][hour]:.3f} Kč/kWh")
         
         logger.info(f"NAČÍTÁNÍ CEN: Načteno {len(rows)} cenových záznamů")
         
@@ -339,39 +343,6 @@ def predict_battery_state(house_id):
 if __name__ == "__main__":
     try:
         active_houses = get_active_houses()
-        print("\nAktivní domy:", active_houses)
-        
-        for house_id in active_houses:
-            print(f"\nPredikce pro dům {house_id}:")
-            prediction = predict_battery_state(house_id)
-            
-            if prediction:
-                house_data = prediction['house_data']
-                solar_prediction = prediction['solar_prediction']
-                consumption_prediction = prediction['consumption_prediction']
-                battery_levels = prediction['battery_levels']
-                
-                print("\nData domu:")
-                for key, value in house_data.items():
-                    print(f"  {key}: {value}")
-                
-                print("\nPredikce pro jednotlivé hodiny:")
-                for date in sorted(battery_levels.keys()):
-                    print(f"\n{date}:")
-                    for hour in range(24):
-                        if hour in battery_levels[date]:
-                            battery_state = battery_levels[date][hour]
-                            solar = solar_prediction[date].get(hour, 0)
-                            
-                            day = datetime.strptime(date, '%Y-%m-%d')
-                            is_weekend = day.weekday() >= 5
-                            consumption = consumption_prediction['weekend' if is_weekend else 'weekday'].get(hour, 0)
-                            
-                            print(f"  {hour:02d}:00 - "
-                                  f"Baterie: {battery_state['original_level']:.2f} -> {battery_state['new_level']:.2f} kWh "
-                                  f"(Δ {battery_state['delta']:+.2f} kWh), "
-                                  f"Výroba: {solar:.2f} Wh, "
-                                  f"Spotřeba: {consumption:.2f} Wh")
-                        
+        get_price_data()
     except Exception as e:
-        print(f"Chyba: {str(e)}") 
+        print(f"Chyba: {str(e)}")

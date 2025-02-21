@@ -4,7 +4,7 @@ from datetime import datetime, timedelta
 
 logging.basicConfig(
     level=logging.INFO,
-    format='[%(asctime)s] %(levelname)s: %(message}s',
+    format='[%(asctime)s] %(levelname)s: %(message)s',
     filename='/app/logs/django.log',
     filemode='a'
 )
@@ -12,12 +12,6 @@ logging.basicConfig(
 logger = logging.getLogger('api')
 
 def get_active_houses():
-    """
-    Získá ID všech aktivních domů z databáze.
-    
-    Returns:
-        list: Seznam ID aktivních domů
-    """
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -49,12 +43,6 @@ def get_active_houses():
             conn.close()
 
 def get_price_data():
-    """
-    Získá spotové ceny od aktuální hodiny do konce zítřejšího dne.
-    
-    Returns:
-        dict: Slovník s cenami {datum: {hodina: cena_czk}}
-    """
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -103,15 +91,6 @@ def get_price_data():
             conn.close()
 
 def get_house_data(house_id):
-    """
-    Získá potřebná data pro plánování nabíjení pro jeden dům.
-    
-    Args:
-        house_id: ID domu
-        
-    Returns:
-        dict: Slovník s parametry domu
-    """
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -162,17 +141,6 @@ def get_house_data(house_id):
             conn.close()
 
 def get_solar_prediction(house_power, solar_variation=1.0):
-    """
-    Získá predikci solární výroby na zbytek dne a další den.
-    Přepočítá predikci podle instalovaného výkonu domu.
-    
-    Args:
-        house_power (float): Instalovaný výkon solárů domu v kWp
-        solar_variation (float): Variace výkonu (defaultně 1.0)
-        
-    Returns:
-        dict: Předpověď výroby {datum: {hodina: výroba_wh}}
-    """
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -187,7 +155,6 @@ def get_solar_prediction(house_power, solar_variation=1.0):
         tomorrow = today + timedelta(days=1)
         current_hour = current_time.hour
 
-        # Získání predikcí pro zbytek dneška a celý zítřek
         cur.execute("""
             SELECT timestamp, watt_hours_period
             FROM api_solardata 
@@ -199,7 +166,6 @@ def get_solar_prediction(house_power, solar_variation=1.0):
         production = {}
         rows = cur.fetchall()
         
-        # Přepočet podle výkonu domu (predikce jsou pro 20kWp)
         power_ratio = house_power / 20
         
         for timestamp, wh in rows:
@@ -209,11 +175,7 @@ def get_solar_prediction(house_power, solar_variation=1.0):
             if date_str not in production:
                 production[date_str] = {}
             
-            # Pokud čas končí :00, použijeme aktuální hodinu
-            # Jinak použijeme následující hodinu
             hour = timestamp.hour if minutes == 0 else timestamp.hour + 1
-            
-            # Přepočet a aplikace variace
             production[date_str][hour] = wh * power_ratio * solar_variation
         
         logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Načteno {len(rows)} záznamů pro {house_power}kWp")
@@ -234,19 +196,6 @@ def get_solar_prediction(house_power, solar_variation=1.0):
             conn.close()
 
 def get_consumption_prediction(house_id):
-    """
-    Získá predikci spotřeby na základě historických dat.
-    Rozdělí dny na víkendy a všední dny, spočítá průměrnou spotřebu pro každou hodinu.
-    
-    Args:
-        house_id: ID domu
-        
-    Returns:
-        dict: Předpověď spotřeby {
-            'weekday': {hodina: spotřeba_wh},
-            'weekend': {hodina: spotřeba_wh}
-        }
-    """
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -256,11 +205,9 @@ def get_consumption_prediction(house_id):
         )
         cur = conn.cursor()
         
-        # Data za posledních 30 dní
         today = datetime.now().date()
         start_date = today - timedelta(days=30)
         
-        # SQL dotaz pro získání součtů po hodinách, rozděleno na víkendy a všední dny
         cur.execute("""
             WITH consumption_items AS (
                 SELECT 
@@ -295,7 +242,6 @@ def get_consumption_prediction(house_id):
         
         rows = cur.fetchall()
         
-        # Zpracování výsledků
         consumption = {
             'weekday': {},
             'weekend': {}
@@ -318,36 +264,63 @@ def get_consumption_prediction(house_id):
         if 'conn' in locals():
             conn.close()
 
-def predict_battery_state(house_id):
-    """
-    Předpoví stav baterie pro následující hodiny.
-    Zatím pouze se solární predikcí, bez započítání spotřeby.
+def calculate_battery_levels(current_level, solar_prediction, consumption_prediction, battery_capacity, is_weekend):
+    battery_levels = {}
+    current_time = datetime.now()
     
-    Args:
-        house_id: ID domu
-    """
+    for date in sorted(solar_prediction.keys()):
+        battery_levels[date] = {}
+        
+        for hour in sorted(solar_prediction[date].keys()):
+            if date == current_time.date().strftime('%Y-%m-%d') and hour < current_time.hour:
+                continue
+                
+            day_type = 'weekend' if is_weekend else 'weekday'
+            consumption = consumption_prediction[day_type].get(hour, 0)
+            production = solar_prediction[date].get(hour, 0)
+            
+            delta = (production - consumption) / 1000
+            new_level = current_level + delta
+            new_level = max(0, min(new_level, battery_capacity))
+            
+            battery_levels[date][hour] = new_level
+            current_level = new_level
+            
+        logger.info(f"VÝPOČET STAVU BATERIE: Vypočteno {len(battery_levels[date])} hodin pro {date}")
+    
+    return battery_levels
+
+def predict_battery_state(house_id):
     try:
-        # Získání dat o domu
         house_data = get_house_data(house_id)
         if not house_data:
             logger.error(f"PREDIKCE STAVU BATERIE: Dům {house_id} nenalezen")
             return None
             
-        # Získání solární predikce
         solar_prediction = get_solar_prediction(
             house_data['solar_power']
         )
         
-        # Získání predikce spotřeby
         consumption_prediction = get_consumption_prediction(house_id)
         
-        # Zde budeme dále implementovat výpočet stavu baterie
+        current_time = datetime.now()
+        is_weekend = current_time.weekday() >= 5
+        
+        battery_levels = calculate_battery_levels(
+            current_level=house_data['current_battery_level'],
+            solar_prediction=solar_prediction,
+            consumption_prediction=consumption_prediction,
+            battery_capacity=house_data['battery_capacity'],
+            is_weekend=is_weekend
+        )
+        
         logger.info(f"PREDIKCE STAVU BATERIE: Data načtena pro dům {house_id}")
         
         return {
             'house_data': house_data,
             'solar_prediction': solar_prediction,
-            'consumption_prediction': consumption_prediction
+            'consumption_prediction': consumption_prediction,
+            'battery_levels': battery_levels
         }
         
     except Exception as e:
@@ -367,27 +340,26 @@ if __name__ == "__main__":
                 house_data = prediction['house_data']
                 solar_prediction = prediction['solar_prediction']
                 consumption_prediction = prediction['consumption_prediction']
+                battery_levels = prediction['battery_levels']
                 
                 print("\nData domu:")
                 for key, value in house_data.items():
                     print(f"  {key}: {value}")
                 
-                print("\nPredikce solární výroby:")
-                for date in sorted(solar_prediction.keys()):
+                print("\nPredikce pro jednotlivé hodiny:")
+                for date in sorted(battery_levels.keys()):
                     print(f"\n{date}:")
-                    for hour in sorted(solar_prediction[date].keys()):
-                        wh = solar_prediction[date][hour]
-                        print(f"  {hour:02d}:00 - {wh:.2f} Wh")
-                
-                print("\nPrůměrná spotřeba - všední dny:")
-                for hour in range(24):
-                    if hour in consumption_prediction['weekday']:
-                        print(f"  {hour:02d}:00 - {consumption_prediction['weekday'][hour]:.2f} Wh")
-                
-                print("\nPrůměrná spotřeba - víkendy:")
-                for hour in range(24):
-                    if hour in consumption_prediction['weekend']:
-                        print(f"  {hour:02d}:00 - {consumption_prediction['weekend'][hour]:.2f} Wh")
+                    for hour in sorted(battery_levels[date].keys()):
+                        battery_level = battery_levels[date][hour]
+                        solar = solar_prediction[date].get(hour, 0)
+                        
+                        day = datetime.strptime(date, '%Y-%m-%d')
+                        is_weekend = day.weekday() >= 5
+                        consumption = consumption_prediction['weekend' if is_weekend else 'weekday'].get(hour, 0)
+                        
+                        print(f"  {hour:02d}:00 - Baterie: {battery_level:.2f} kWh, "
+                              f"Výroba: {solar:.2f} Wh, "
+                              f"Spotřeba: {consumption:.2f} Wh")
                         
     except Exception as e:
         print(f"Chyba: {str(e)}")

@@ -13,45 +13,32 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # Stáhne kód
       - uses: actions/checkout@v2
-
-      # Nastav WARP (IPv4 + IPv6)
+      
+      # Nastavení WARP pro IPv6 podporu
       - name: Set up WARP
         uses: fscarmen/warp-on-actions@v1.1
         with:
-          stack: dual  # Použij IPv4 i IPv6
+          stack: dual
 
-      # Vytvoř adresář .ssh a soubor known_hosts
-      - name: Create .ssh directory and known_hosts file
-        run: |
-          mkdir -p ~/.ssh
-          touch ~/.ssh/known_hosts
-
-      # Přidej server do known_hosts (přes IPv6)
-      - name: Adding Known Hosts
-        run: ssh-keyscan -H 2001:718:1c01:21:250:56ff:fe8e:737f >> ~/.ssh/known_hosts
-
-      # Nastav SSH klíč
-      - name: Install SSH key
-        uses: shimataro/ssh-key-action@v2
+      # SSH deploy pomocí appleboy/ssh-action s IPv6
+      - name: Deploy to server
+        uses: appleboy/ssh-action@master
         with:
+          host: 2001:718:1c01:21:250:56ff:fe8e:737f # IPv6 adresa vašeho serveru
+          username: soda
           key: ${{ secrets.SSH_PRIVATE_KEY }}
-          known_hosts: unnecessary
-          if_key_exists: replace
-
-      # Deploy přes SSH (přes IPv6)
-      - name: Deploy with SSH
-        run: |
-          ssh soda@[2001:718:1c01:21:250:56ff:fe8e:737f] "\
-            cd /var/www/FVE_WebApplication && \
-            git pull && \
-            echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S ln -sf /var/www/FVE_WebApplication/nginx/fve.conf /etc/nginx/sites-enabled/fve && \
-            echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S rm -f /etc/nginx/sites-enabled/default && \
-            echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S nginx -t && \
-            echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S systemctl reload nginx && \
-            docker-compose -f docker-compose.prod.yml down --remove-orphans && \
-            docker ps -a | grep 'fve_webapplication' | awk '{print $1}' | xargs -r docker rm -f && \
-            docker system prune -af && \
-            docker-compose -f docker-compose.prod.yml up -d --build && \
-            docker-compose -f docker-compose.prod.yml exec -T backend python manage.py migrate"
+          protocol: tcp6
+          port: 22
+          script: |
+            cd /var/www/FVE_WebApplication
+            git pull
+            echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S ln -sf /var/www/FVE_WebApplication/nginx/fve.conf /etc/nginx/sites-enabled/fve
+            echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S rm -f /etc/nginx/sites-enabled/default
+            echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S nginx -t
+            echo '${{ secrets.SUDO_PASSWORD }}' | sudo -S systemctl reload nginx
+            docker-compose -f docker-compose.prod.yml down --remove-orphans
+            docker ps -a | grep 'fve_webapplication' | awk '{print $1}' | xargs -r docker rm -f
+            docker system prune -af
+            docker-compose -f docker-compose.prod.yml up -d --build
+            docker-compose -f docker-compose.prod.yml exec -T backend python manage.py migrate

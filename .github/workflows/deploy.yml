@@ -16,16 +16,11 @@ jobs:
       # Stáhne kód
       - uses: actions/checkout@v2
 
-      # Nainstaluj WARP a připoj se
-      - name: Install and connect to Cloudflare WARP
-        run: |
-          curl https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
-          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
-          sudo apt-get update && sudo apt-get install -y cloudflare-warp
-
-          # Přijmi podmínky služby ručně
-          echo "y" | warp-cli registration new  # Automaticky potvrď podmínky
-          warp-cli connect
+      # Nastav WARP (IPv4 + IPv6)
+      - name: Set up WARP
+        uses: fscarmen/warp-on-actions@v1.1
+        with:
+          stack: dual  # Použij IPv4 i IPv6
 
       # Přidej server do known_hosts (přes IPv6)
       - name: Adding Known Hosts

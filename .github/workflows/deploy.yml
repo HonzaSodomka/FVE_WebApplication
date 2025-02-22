@@ -1,12 +1,10 @@
 name: Deploy to Production
 
-# Spouští se při pushi na main
 on:
   push:
     branches:
       - main
 
-# Když přijde druhý push během nasazování předchozího, ten předchozí se zruší
 concurrency: 
   group: production_environment
   cancel-in-progress: true
@@ -15,22 +13,31 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-      # Stáhne virtuálně kód na ubuntu virt stroj
+      # Stáhne kód
       - uses: actions/checkout@v2
-      
-      # Nastavuje privátní klíč pro ssh připojení k serveru
+
+      # Nainstaluj WARP a připoj se
+      - name: Install and connect to Cloudflare WARP
+        run: |
+          curl https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
+          echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
+          sudo apt-get update && sudo apt-get install -y cloudflare-warp
+          warp-cli register
+          warp-cli connect
+
+      # Přidej server do known_hosts (přes IPv6)
+      - name: Adding Known Hosts
+        run: ssh-keyscan -H 2001:718:1c01:21:250:56ff:fe8e:737f >> ~/.ssh/known_hosts
+
+      # Nastav SSH klíč
       - name: Install SSH key
         uses: shimataro/ssh-key-action@v2
         with:
           key: ${{ secrets.SSH_PRIVATE_KEY }}
           known_hosts: unnecessary
           if_key_exists: replace
-          
-      # Nastavuje cílový server (IPv6) mezi známé hostitele (důvěřuje mu)
-      - name: Adding Known Hosts
-        run: ssh-keyscan -H 2001:718:1c01:21:250:56ff:fe8e:737f >> ~/.ssh/known_hosts
-      
-      # Deploy přes ssh (jako bych to dělal ručně v cmd)
+
+      # Deploy přes SSH (přes IPv6)
       - name: Deploy with SSH
         run: |
           ssh soda@[2001:718:1c01:21:250:56ff:fe8e:737f] "\

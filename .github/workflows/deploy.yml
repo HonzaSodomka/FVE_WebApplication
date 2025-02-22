@@ -22,7 +22,9 @@ jobs:
           curl https://pkg.cloudflareclient.com/pubkey.gpg | sudo gpg --yes --dearmor --output /usr/share/keyrings/cloudflare-warp-archive-keyring.gpg
           echo "deb [signed-by=/usr/share/keyrings/cloudflare-warp-archive-keyring.gpg] https://pkg.cloudflareclient.com/ $(lsb_release -cs) main" | sudo tee /etc/apt/sources.list.d/cloudflare-client.list
           sudo apt-get update && sudo apt-get install -y cloudflare-warp
-          warp-cli --accept-tos registration new  # Správné použití --accept-tos
+
+          # Přijmi podmínky služby ručně
+          echo "y" | warp-cli registration new  # Automaticky potvrď podmínky
           warp-cli connect
 
       # Přidej server do known_hosts (přes IPv6)

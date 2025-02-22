@@ -22,6 +22,12 @@ jobs:
         with:
           stack: dual  # Použij IPv4 i IPv6
 
+      # Vytvoř adresář .ssh a soubor known_hosts
+      - name: Create .ssh directory and known_hosts file
+        run: |
+          mkdir -p ~/.ssh
+          touch ~/.ssh/known_hosts
+
       # Přidej server do known_hosts (přes IPv6)
       - name: Adding Known Hosts
         run: ssh-keyscan -H 2001:718:1c01:21:250:56ff:fe8e:737f >> ~/.ssh/known_hosts

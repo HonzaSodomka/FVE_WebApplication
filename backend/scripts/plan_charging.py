@@ -172,6 +172,7 @@ def get_solar_prediction(house_power, solar_variation=1.0):
         
         power_ratio = house_power / 20
         
+        print(f"\nPredikce solární výroby (pro {house_power}kWp):")
         for timestamp, wh in rows:
             date_str = timestamp.strftime('%Y-%m-%d')
             minutes = timestamp.minute
@@ -181,6 +182,9 @@ def get_solar_prediction(house_power, solar_variation=1.0):
             
             hour = timestamp.hour if minutes == 0 else timestamp.hour + 1
             production[date_str][hour] = wh * power_ratio * solar_variation
+            
+            # Přidáme výpis predikce
+            print(f"{date_str} {hour:02d}:00 - {production[date_str][hour]:.1f} Wh")
         
         logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Načteno {len(rows)} záznamů pro {house_power}kWp")
         
@@ -209,7 +213,16 @@ def get_consumption_prediction(house_id):
         )
         cur = conn.cursor()
         
-        today = datetime.now().date()
+        current_time = datetime.now()
+        today = current_time.date()
+        tomorrow = today + timedelta(days=1)
+        current_hour = current_time.hour
+        
+        # Zjistíme typ dnů (víkend/všední)
+        is_today_weekend = today.weekday() >= 5
+        is_tomorrow_weekend = tomorrow.weekday() >= 5
+        
+        # Načteme historická data za posledních 30 dní
         start_date = today - timedelta(days=30)
         
         cur.execute("""
@@ -246,17 +259,40 @@ def get_consumption_prediction(house_id):
         
         rows = cur.fetchall()
         
-        consumption = {
+        # Průměrná spotřeba podle typů dnů
+        averages = {
             'weekday': {},
             'weekend': {}
         }
         
         for hour, day_type, avg_consumption in rows:
-            consumption[day_type][int(hour)] = avg_consumption
+            averages[day_type][int(hour)] = avg_consumption
+        
+        # Vytvoříme predikci jen pro požadované hodiny
+        prediction = {
+            today.strftime('%Y-%m-%d'): {},
+            tomorrow.strftime('%Y-%m-%d'): {}
+        }
+        
+        # Pro dnešek od aktuální hodiny
+        today_type = 'weekend' if is_today_weekend else 'weekday'
+        print(f"\nPredikce spotřeby pro {today.strftime('%Y-%m-%d')} ({today_type}):")
+        for hour in range(current_hour, 24):
+            consumption = averages[today_type].get(hour, 0)
+            prediction[today.strftime('%Y-%m-%d')][hour] = consumption
+            print(f"{today.strftime('%Y-%m-%d')} {hour:02d}:00 - {consumption:.1f} Wh")
+            
+        # Pro zítřek všechny hodiny
+        tomorrow_type = 'weekend' if is_tomorrow_weekend else 'weekday'
+        print(f"\nPredikce spotřeby pro {tomorrow.strftime('%Y-%m-%d')} ({tomorrow_type}):")
+        for hour in range(24):
+            consumption = averages[tomorrow_type].get(hour, 0)
+            prediction[tomorrow.strftime('%Y-%m-%d')][hour] = consumption
+            print(f"{tomorrow.strftime('%Y-%m-%d')} {hour:02d}:00 - {consumption:.1f} Wh")
             
         logger.info(f"NAČÍTÁNÍ PREDIKCE SPOTŘEBY: Zpracováno {len(rows)} hodinových průměrů")
         
-        return consumption
+        return prediction
         
     except Exception as e:
         logger.error(f"CHYBA PŘI NAČÍTÁNÍ PREDIKCE SPOTŘEBY: {str(e)}")

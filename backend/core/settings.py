@@ -29,7 +29,8 @@ DEBUG = True
 ALLOWED_HOSTS = [
     'localhost',
     '127.0.0.1',
-    'bijec.nti.tul.cz'
+    'bijec.nti.tul.cz',
+    '165.232.77.216',
 ]
 
 
@@ -150,7 +151,9 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:3000",
     "http://bijec.nti.tul.cz:3000",
-    "http://bijec.nti.tul.cz"
+    "http://bijec.nti.tul.cz",
+    "http://165.232.77.216:3000",
+    "http://165.232.77.216"
 ]
 CORS_ALLOW_CREDENTIALS = True 
 

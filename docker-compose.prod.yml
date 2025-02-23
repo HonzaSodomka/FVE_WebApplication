@@ -2,64 +2,62 @@ version: '3'
 services:
   frontend:
     build:
-      context: ./frontend  # Cesta k frontend Dockerfile
+      context: ./frontend
       args:
-        - NODE_ENV=${NODE_ENV:-production}  # Defaultně production
-        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://bijec.nti.tul.cz}
-        - NODE_OPTIONS="--max-old-space-size=2048"  # Zvýšení limitu paměti pro Node.js
+        - NODE_ENV=${NODE_ENV:-production}
+        - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://165.232.77.216}
+        - NODE_OPTIONS="--max-old-space-size=2048"
     ports:
-      - "127.0.0.1:3000:3000"  # Mapování portu hosta na port kontejneru - omezeno na localhost
+      - "3000:3000"
     environment: 
       - NODE_ENV=${NODE_ENV:-production}
-      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-https://bijec.nti.tul.cz}
+      - NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL:-http://165.232.77.216}
       - NODE_OPTIONS="--max-old-space-size=2048"
-    deploy:  # Nastavení zdrojů pro kontejner
+    deploy:
       resources:
         limits:
-          memory: 2G  # Maximální využití paměti
+          memory: 2G
         reservations:
-          memory: 512M  # Garantovaná paměť
+          memory: 512M
 
   backend:
-    build: ./backend  # Cesta k backend Dockerfile
+    build: ./backend
     ports:
-      - "127.0.0.1:8000:8000"  # Mapování portu pro API - omezeno na localhost
-    depends_on:  # Čeká na "zdravý" stav databáze
+      - "8000:8000"
+    depends_on:
       db:
         condition: service_healthy
     environment:
-      - DATABASE_URL=postgres://postgres:heslo@db:5432/fve_db  # Připojení k DB
+      - DATABASE_URL=postgres://postgres:heslo@db:5432/fve_db
       - TZ=Europe/Prague
-    volumes:  # Perzistentní uložení migrací
+    volumes:
       - ./backend/api/migrations:/app/api/migrations
       - backend_logs:/app/logs
 
   db:
-    image: postgres:latest  # Oficiální Postgres image
+    image: postgres:latest
     volumes:
-      - postgres_data:/var/lib/postgresql/data  # Perzistentní data
-    environment:  # Nastavení databáze
+      - postgres_data:/var/lib/postgresql/data
+    environment:
       - POSTGRES_DB=fve_db
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=heslo
     ports:
-      - "127.0.0.1:5432:5432"  # Omezeno na localhost
-    healthcheck:  # Kontrola "zdraví" databáze
+      - "5432:5432"
+    healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 5
 
-  # Adminer pro správu databáze
   adminer:
     image: adminer:latest
     ports:
-      - "127.0.0.1:8080:8080"  # Webové rozhraní pro správu DB - omezeno na localhost
+      - "8080:8080"
     depends_on:
       - db
 
-# Definice perzistentních volumes
 volumes:
   postgres_data:
-    name: fve_webapplication_postgres_data  # Pojmenovaný volume pro DB data
+    name: fve_webapplication_postgres_data
   backend_logs:

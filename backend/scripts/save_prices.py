@@ -41,12 +41,12 @@ def save_tomorrow_prices():
     cur = conn.cursor()
     
     #Zítřek = dnešek + 1 den
-    tomorrow = date.today() + timedelta(days=1)
+    tomorrow = date.today() #+ timedelta(days=1)
     logger.info(f"Ukládám spotové ceny pro den {tomorrow}")
     
     try:
         records_updated = 0
-        for hour_data in data['hoursTomorrow']:
+        for hour_data in data['hoursToday']:
             #ON CONFLICT zajistí, že existující data se přepíší při aktualizaci
             cur.execute("""
                 INSERT INTO api_pricedata (date, hour, price_czk, level, level_num)

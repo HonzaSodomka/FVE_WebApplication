@@ -50,8 +50,7 @@ def save_solar_forecast():
    
    try:
        data = fetch_solar_forecast()
-       #tomorrow = (date.today() + timedelta(days=1)).strftime('%Y-%m-%d')
-       tomorrow = (date.today()).strftime('%Y-%m-%d')
+       tomorrow = (date.today() + timedelta(days=1)).strftime('%Y-%m-%d')
        logger.info(f"Ukládám předpověď solární výroby pro den {tomorrow}")
        
        records_updated = 0

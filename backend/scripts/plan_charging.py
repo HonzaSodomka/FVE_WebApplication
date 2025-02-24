@@ -417,7 +417,7 @@ if __name__ == "__main__":
                 print(f"{key}: {value}")
                 
             # Získáme predikci solární výroby
-            solar_data = get_solar_prediction(house_data['solar_power'])
+            solar_data = get_solar_prediction(house_data['solar_power'], house_data['charging_efficiency'])
             
             # Získáme predikci spotřeby
             consumption_data = get_consumption_prediction(house_id)

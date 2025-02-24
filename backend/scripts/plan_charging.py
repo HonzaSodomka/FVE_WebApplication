@@ -376,9 +376,34 @@ def predict_battery_state(house_id):
         logger.error(f"CHYBA PŘI PREDIKCI STAVU BATERIE: {str(e)}")
         raise
 
+
 if __name__ == "__main__":
     try:
+        # 1. Získáme aktivní domy
         active_houses = get_active_houses()
-        get_price_data()
+        print("\nAktivní domy:", active_houses)
+        
+        # 2. Získáme ceny elektřiny
+        prices = get_price_data()
+        
+        # 3. Pro každý aktivní dům
+        for house_id in active_houses:
+            print(f"\n{'='*50}")
+            print(f"Dům ID: {house_id}")
+            print(f"{'='*50}")
+            
+            # Načteme data o domu
+            house_data = get_house_data(house_id)
+            print("\nParametry domu:")
+            for key, value in house_data.items():
+                print(f"{key}: {value}")
+                
+            # Získáme predikci solární výroby
+            solar_data = get_solar_prediction(house_data['solar_power'])
+            
+            # Získáme predikci spotřeby
+            consumption_data = get_consumption_prediction(house_id)
+            
     except Exception as e:
         print(f"Chyba: {str(e)}")
+        logger.error(f"CHYBA PŘI BĚHU SKRIPTU: {str(e)}")

@@ -188,6 +188,7 @@ def get_solar_prediction(house_power, charging_efficiency):
         # Druhé zpracování pro skutečné uložení dat
         for timestamp, wh in rows:
             date_str = timestamp.strftime('%Y-%m-%d')
+            minutes = timestamp.minute
             hour = timestamp.hour
             
             # Přeskočíme nulové hodnoty před prvním nenulovým záznamem dne
@@ -197,7 +198,17 @@ def get_solar_prediction(house_power, charging_efficiency):
             if date_str not in production:
                 production[date_str] = {}
             
-            # Aplikujeme pouze převod výkonu a účinnost nabíjení
+            # Pokud nejsme na začátku hodiny, posuneme záznam do další hodiny
+            if minutes > 0:
+                hour = (hour + 1) % 24
+                # Pokud přecházíme přes půlnoc, změníme datum
+                if hour == 0:
+                    date = timestamp.date() + timedelta(days=1)
+                    date_str = date.strftime('%Y-%m-%d')
+                    if date_str not in production:
+                        production[date_str] = {}
+            
+            # Přepočet na instalovaný výkon a aplikace účinnosti nabíjení
             adjusted_wh = wh * power_ratio * efficiency_multiplier
             production[date_str][hour] = adjusted_wh
             

@@ -333,106 +333,84 @@ def get_consumption_prediction(house_id):
         if 'conn' in locals():
             conn.close()
 
-def calculate_battery_levels(current_level, solar_prediction, consumption_prediction, battery_capacity, is_weekend):
-    battery_levels = {}
-    current_time = datetime.now()
-    
-    for date in sorted(solar_prediction.keys()):
-        battery_levels[date] = {}
-        
-        # Pro každou hodinu 0-23
-        for hour in range(24):
-            # Přeskočit už uplynulé hodiny (kromě aktuální)
-            if date == current_time.date().strftime('%Y-%m-%d') and hour < current_time.hour:
-                continue
-                
-            day_type = 'weekend' if is_weekend else 'weekday'
-            consumption = consumption_prediction[day_type].get(hour, 0)
-            production = solar_prediction[date].get(hour, 0)
-            
-            # Změna stavu baterie (ve Wh)
-            delta = (production - consumption) / 1000  # převod na kWh
-            new_level = current_level + delta
-            new_level = max(0, min(new_level, battery_capacity))
-            
-            # Uložíme původní i nový stav plus změnu
-            battery_levels[date][hour] = {
-                'original_level': current_level,
-                'new_level': new_level,
-                'delta': delta
-            }
-            
-            current_level = new_level
-            
-        logger.info(f"VÝPOČET STAVU BATERIE: Vypočteno {len(battery_levels[date])} hodin pro {date}")
-    
-    return battery_levels
-
 def predict_battery_state(house_id):
     try:
+        # Načteme data o domu
         house_data = get_house_data(house_id)
         if not house_data:
             logger.error(f"PREDIKCE STAVU BATERIE: Dům {house_id} nenalezen")
             return None
             
+        # Získáme předpovědi
         solar_prediction = get_solar_prediction(
-            house_data['solar_power']
+            house_power=house_data['solar_power'],
+            charging_efficiency=house_data['charging_efficiency']
         )
-        
         consumption_prediction = get_consumption_prediction(house_id)
         
-        current_time = datetime.now()
-        is_weekend = current_time.weekday() >= 5
+        # Aktuální stav baterie
+        battery_level = house_data['current_battery_level']
+        battery_capacity = house_data['battery_capacity']
         
-        battery_levels = calculate_battery_levels(
-            current_level=house_data['current_battery_level'],
-            solar_prediction=solar_prediction,
-            consumption_prediction=consumption_prediction,
-            battery_capacity=house_data['battery_capacity'],
-            is_weekend=is_weekend
-        )
+        # Seřadíme všechny časové údaje
+        all_hours = []
+        for date_str, hours in consumption_prediction.items():
+            for hour in hours.keys():
+                all_hours.append((date_str, hour))
+        all_hours.sort()
         
-        logger.info(f"PREDIKCE STAVU BATERIE: Data načtena pro dům {house_id}")
+        # Pro každou hodinu spočítáme změnu stavu baterie
+        results = []
+        for date_str, hour in all_hours:
+            # Výchozí hodnoty
+            solar_energy = 0
+            consumption = consumption_prediction[date_str][hour]
+            
+            # Pokud máme solární výrobu pro tuto hodinu
+            if date_str in solar_prediction and hour in solar_prediction[date_str]:
+                solar_energy = solar_prediction[date_str][hour]
+            
+            # Změna stavu baterie
+            net_change = (solar_energy - consumption) / 1000  # převod na kWh
+            charged = max(0, net_change)
+            discharged = abs(min(0, net_change))
+            
+            # Aktualizace stavu baterie
+            old_level = battery_level
+            battery_level = max(0, min(battery_capacity, battery_level + net_change))
+            
+            results.append({
+                'datetime': f"{date_str} {hour:02d}:00",
+                'solar_kwh': solar_energy / 1000,
+                'consumption_kwh': consumption / 1000,
+                'charged_kwh': charged,
+                'discharged_kwh': discharged,
+                'battery_level': battery_level
+            })
         
-        return {
-            'house_data': house_data,
-            'solar_prediction': solar_prediction,
-            'consumption_prediction': consumption_prediction,
-            'battery_levels': battery_levels
-        }
+        return results
         
     except Exception as e:
         logger.error(f"CHYBA PŘI PREDIKCI STAVU BATERIE: {str(e)}")
         raise
 
-
 if __name__ == "__main__":
     try:
-        # 1. Získáme aktivní domy
         active_houses = get_active_houses()
         print("\nAktivní domy:", active_houses)
         
-        # 2. Získáme ceny elektřiny
-        prices = get_price_data()
-        
-        # 3. Pro každý aktivní dům
         for house_id in active_houses:
-            print(f"\n{'='*50}")
-            print(f"Dům ID: {house_id}")
-            print(f"{'='*50}")
+            print(f"\nPredikce pro dům {house_id}:")
+            results = predict_battery_state(house_id)
             
-            # Načteme data o domu
-            house_data = get_house_data(house_id)
-            print("\nParametry domu:")
-            for key, value in house_data.items():
-                print(f"{key}: {value}")
-                
-            # Získáme predikci solární výroby
-            solar_data = get_solar_prediction(house_data['solar_power'], house_data['charging_efficiency'])
-            
-            # Získáme predikci spotřeby
-            consumption_data = get_consumption_prediction(house_id)
+            if results:
+                for hour in results:
+                    print(f"{hour['datetime']}: "
+                          f"Solar {hour['solar_kwh']:+.2f} kWh, "
+                          f"Spotřeba {hour['consumption_kwh']:.2f} kWh, "
+                          f"Nabito {hour['charged_kwh']:+.2f} kWh, "
+                          f"Vybito {hour['discharged_kwh']:.2f} kWh, "
+                          f"Baterie {hour['battery_level']:.2f} kWh")
             
     except Exception as e:
         print(f"Chyba: {str(e)}")
-        logger.error(f"CHYBA PŘI BĚHU SKRIPTU: {str(e)}")

@@ -144,7 +144,7 @@ def get_house_data(house_id):
         if 'conn' in locals():
             conn.close()
 
-def get_solar_prediction(house_power, solar_variation=1.0):
+def get_solar_prediction(house_power, charging_efficiency):
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -171,20 +171,38 @@ def get_solar_prediction(house_power, solar_variation=1.0):
         rows = cur.fetchall()
         
         power_ratio = house_power / 20
+        efficiency_multiplier = charging_efficiency / 100
         
-        print(f"\nPredikce solární výroby (pro {house_power}kWp):")
+        print(f"\nPredikce solární výroby (pro {house_power}kWp, účinnost nabíjení {charging_efficiency}%):")
+        
+        # První zpracování pro nalezení prvního nenulového záznamu pro každý den
+        first_nonzero = {}
         for timestamp, wh in rows:
             date_str = timestamp.strftime('%Y-%m-%d')
-            minutes = timestamp.minute
+            hour = timestamp.hour
             
+            if wh > 0:  # Pokud najdeme nenulovou hodnotu
+                if date_str not in first_nonzero:  # a ještě nemáme pro tento den
+                    first_nonzero[date_str] = hour  # uložíme hodinu
+        
+        # Druhé zpracování pro skutečné uložení dat
+        for timestamp, wh in rows:
+            date_str = timestamp.strftime('%Y-%m-%d')
+            hour = timestamp.hour
+            
+            # Přeskočíme nulové hodnoty před prvním nenulovým záznamem dne
+            if hour < first_nonzero.get(date_str, 0) and wh == 0:
+                continue
+                
             if date_str not in production:
                 production[date_str] = {}
             
-            hour = timestamp.hour if minutes == 0 else timestamp.hour + 1
-            production[date_str][hour] = wh * power_ratio * solar_variation
+            # Aplikujeme pouze převod výkonu a účinnost nabíjení
+            adjusted_wh = wh * power_ratio * efficiency_multiplier
+            production[date_str][hour] = adjusted_wh
             
-            # Přidáme výpis predikce
-            print(f"{date_str} {hour:02d}:00 - {production[date_str][hour]:.1f} Wh")
+            # Výpis hodnot
+            print(f"{date_str} {hour:02d}:00 - {adjusted_wh:.1f} Wh")
         
         logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Načteno {len(rows)} záznamů pro {house_power}kWp")
         

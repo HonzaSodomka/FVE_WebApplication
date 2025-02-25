@@ -436,14 +436,22 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
         logger.info(f"OPTIMALIZACE NABÍJENÍ: Parametry - Kapacita: {battery_capacity}kWh, Min: {min_battery_level}kWh, " + 
                     f"Target: {target_battery_level}kWh, Max výkon: {max_charging_power}kW")
         
+        # Vytvoříme kopii battery_state, kterou budeme postupně aktualizovat
+        updated_battery_state = []
+        for state in battery_state:
+            updated_battery_state.append(state.copy())
+        
         # Identifikace hodin, které vyžadují nabíjení (baterie klesá pod min nebo target)
         print("\nPREDIKCE STAVU BATERIE A IDENTIFIKACE POTŘEBY NABÍJENÍ:")
         print("-" * 100)
         print(f"{'Datum a čas':<20} {'Solární energie':<18} {'Spotřeba':<14} {'Stav baterie':<16} {'Potřeba nabíjení':<20} {'Priorita':<10} {'Cena (Kč/kWh)':<15}")
         print("-" * 100)
         
-        hours_requiring_charging = []
-        for i, state in enumerate(battery_state):
+        # Vytvoříme seznamy hodin vyžadujících nabíjení
+        high_priority_hours = []  # Pro hodiny pod minimem
+        medium_priority_hours = []  # Pro hodiny pod cílem
+        
+        for i, state in enumerate(updated_battery_state):
             date_str = state['date']
             hour = state['hour']
             
@@ -460,101 +468,180 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
                 energy_needed = min_battery_level - state['battery_level']
                 need_charging = f"ANO ({energy_needed:.2f} kWh)"
                 priority = "VYSOKÁ"
-                hours_requiring_charging.append({
+                high_priority_hours.append({
+                    'index': i,
                     'date': date_str,
                     'hour': hour,
                     'price': price,
+                    'battery_level': state['battery_level'],
                     'needed_kwh': energy_needed,
-                    'priority': 'high'  # Vysoká priorita - musíme dobít
+                    'priority': 'high'
                 })
             elif state['battery_level'] < target_battery_level:
                 # Baterie je pod cílovou úrovní - dobré dobít, ale ne nutné
                 energy_needed = target_battery_level - state['battery_level']
                 need_charging = f"ANO ({energy_needed:.2f} kWh)"
                 priority = "STŘEDNÍ"
-                hours_requiring_charging.append({
+                medium_priority_hours.append({
+                    'index': i,
                     'date': date_str,
                     'hour': hour,
                     'price': price,
+                    'battery_level': state['battery_level'],
                     'needed_kwh': energy_needed,
-                    'priority': 'medium'  # Střední priorita - dobré dobít
+                    'priority': 'medium'
                 })
             
             print(f"{state['datetime']:<20} {state['solar_kwh']*1000:>6.1f} Wh        {state['consumption_kwh']*1000:>6.1f} Wh     {state['battery_level']:>6.2f} kWh      {need_charging:<20} {priority:<10} {price:>6.2f} Kč/kWh")
-                
-        # Seřazení podle priority (napřed vysoká) a ceny (od nejlevnější)
-        hours_requiring_charging.sort(key=lambda x: (0 if x['priority'] == 'high' else 1, x['price']))
         
+        # Seřazení podle ceny (od nejlevnější)
+        high_priority_hours.sort(key=lambda x: x['price'])
+        medium_priority_hours.sort(key=lambda x: x['price'])
+        
+        # Vypíšeme hodiny vyžadující nabíjení
         print("\nHODINY VYŽADUJÍCÍ NABÍJENÍ (SEŘAZENÉ PODLE PRIORITY A CENY):")
-        if hours_requiring_charging:
+        all_charging_hours = high_priority_hours + medium_priority_hours
+        
+        if all_charging_hours:
             print("-" * 80)
             print(f"{'Datum a čas':<20} {'Potřeba (kWh)':<15} {'Priorita':<10} {'Cena (Kč/kWh)':<15}")
             print("-" * 80)
-            for hour in hours_requiring_charging:
-                print(f"{hour['date']} {hour['hour']:02d}:00   {hour['needed_kwh']:>8.2f} kWh      {'VYSOKÁ' if hour['priority'] == 'high' else 'STŘEDNÍ':<10} {hour['price']:>6.2f} Kč/kWh")
+            for hour in high_priority_hours:
+                print(f"{hour['date']} {hour['hour']:02d}:00   {hour['needed_kwh']:>8.2f} kWh      {'VYSOKÁ':<10} {hour['price']:>6.2f} Kč/kWh")
+            for hour in medium_priority_hours:
+                print(f"{hour['date']} {hour['hour']:02d}:00   {hour['needed_kwh']:>8.2f} kWh      {'STŘEDNÍ':<10} {hour['price']:>6.2f} Kč/kWh")
         else:
             print("Žádné hodiny nevyžadují nabíjení - baterie má dostatek energie.")
         
         # Vytvoření optimalizovaného plánu nabíjení
-        charging_plan = []
+        charging_plan = [{
+            'date': state['date'],
+            'hour': state['hour'],
+            'planned_charging_kwh': 0
+        } for state in battery_state]
         
+        # Celková potřeba energie pro minimální úroveň
+        total_min_energy_needed = sum(hour['needed_kwh'] for hour in high_priority_hours)
+        # Celková potřeba energie pro cílovou úroveň (bez započítání minimální úrovně)
+        total_target_energy_needed = sum(hour['needed_kwh'] for hour in medium_priority_hours)
+        
+        print(f"\nCELKOVÉ POTŘEBY ENERGIE:")
+        print(f"- Pro minimální úroveň ({min_battery_level} kWh): {total_min_energy_needed:.2f} kWh")
+        print(f"- Pro cílovou úroveň ({target_battery_level} kWh): {total_target_energy_needed:.2f} kWh")
+        
+        # Aktuální stav baterie pro simulaci
+        simulated_battery_level = house_data['current_battery_level']
+        
+        # Naplánování nabíjení pro hodiny s vysokou prioritou (pod minimem)
+        print("\nPLÁNOVÁNÍ NABÍJENÍ PRO KRITICKÉ HODINY (POD MINIMEM):")
+        remaining_high_priority = []
+        for hour_data in high_priority_hours:
+            idx = hour_data['index']
+            date_str = hour_data['date']
+            hour = hour_data['hour']
+            
+            # Simulované nabíjení
+            # Maximální nabíjecí výkon za hodinu v kWh
+            max_hour_charging = max_charging_power
+            
+            # Kolik energie potřebujeme dodat
+            energy_needed = min_battery_level - updated_battery_state[idx]['battery_level']
+            
+            # Kolik můžeme dodat
+            space_left = battery_capacity - updated_battery_state[idx]['battery_level']
+            
+            planned_charging = min(max_hour_charging, energy_needed, space_left)
+            
+            # Minimální prahová hodnota
+            if planned_charging < 0.1:  # Méně než 100 Wh
+                planned_charging = 0
+                
+            # Aktualizujeme plán
+            charging_plan[idx]['planned_charging_kwh'] = planned_charging
+            
+            print(f"Hodina {date_str} {hour:02d}:00: Plánované nabíjení {planned_charging:.2f} kWh")
+            
+            # Aktualizujeme stav baterie pro všechny následující hodiny
+            if planned_charging > 0:
+                for j in range(idx, len(updated_battery_state)):
+                    updated_battery_state[j]['battery_level'] += planned_charging
+                
+                print(f"  Aktualizovaný stav baterie: {updated_battery_state[idx]['battery_level']:.2f} kWh")
+        
+        # Naplánování nabíjení pro hodiny se střední prioritou (pod cílovou úrovní)
+        print("\nPLÁNOVÁNÍ NABÍJENÍ PRO HODINY POD CÍLOVOU ÚROVNÍ:")
+        for hour_data in medium_priority_hours:
+            idx = hour_data['index']
+            date_str = hour_data['date']
+            hour = hour_data['hour']
+            
+            # Aktualizujeme baterii
+            current_level = updated_battery_state[idx]['battery_level']
+            
+            # Pokud už jsme nad cílovou úrovní, nemusíme nic nabíjet
+            if current_level >= target_battery_level:
+                print(f"Hodina {date_str} {hour:02d}:00: Přeskočeno - baterie už je nad cílovou úrovní ({current_level:.2f} kWh)")
+                continue
+            
+            # Simulované nabíjení
+            # Maximální nabíjecí výkon za hodinu v kWh
+            max_hour_charging = max_charging_power
+            
+            # Kolik energie potřebujeme dodat
+            energy_needed = target_battery_level - current_level
+            
+            # Kolik můžeme dodat
+            space_left = battery_capacity - current_level
+            
+            planned_charging = min(max_hour_charging, energy_needed, space_left)
+            
+            # Minimální prahová hodnota
+            if planned_charging < 0.1:  # Méně než 100 Wh
+                planned_charging = 0
+                
+            # Aktualizujeme plán
+            charging_plan[idx]['planned_charging_kwh'] = planned_charging
+            
+            print(f"Hodina {date_str} {hour:02d}:00: Plánované nabíjení {planned_charging:.2f} kWh")
+            
+            # Aktualizujeme stav baterie pro všechny následující hodiny
+            if planned_charging > 0:
+                for j in range(idx, len(updated_battery_state)):
+                    updated_battery_state[j]['battery_level'] += planned_charging
+                
+                print(f"  Aktualizovaný stav baterie: {updated_battery_state[idx]['battery_level']:.2f} kWh")
+        
+        # Výpis finálního plánu
         print("\nVYTVÁŘÍM OPTIMALIZOVANÝ PLÁN NABÍJENÍ:")
         print("-" * 80)
         print(f"{'Datum a čas':<20} {'Plánované nabíjení':<20} {'Důvod':<40}")
         print("-" * 80)
         
-        # Pro každou hodinu v predikci vytvoříme plán
-        for state in battery_state:
-            date_str = state['date']
-            hour = state['hour']
+        for i, plan in enumerate(charging_plan):
+            date_str = plan['date']
+            hour = plan['hour']
+            planned_charging = plan['planned_charging_kwh']
             
-            # Výchozí hodnota - nenabíjíme
-            planned_charging = 0
+            # Zjistíme důvod pro nabíjení
             reason = "Není potřeba nabíjet"
-            
-            # Najdeme, zda tato hodina vyžaduje nabíjení
-            for hour_data in hours_requiring_charging:
-                if hour_data['date'] == date_str and hour_data['hour'] == hour:
-                    # Tato hodina potřebuje nabíjení
-                    
-                    # Maximální nabíjecí výkon za hodinu v kWh
-                    max_hour_charging = max_charging_power
-                    
-                    # Kolik energie můžeme reálně dodat do baterie
-                    space_left = battery_capacity - state['battery_level']
-                    
-                    # Kolik energie potřebujeme dodat
-                    energy_needed = hour_data['needed_kwh']
-                    
-                    # Množství energie, které chceme nabít
-                    planned_charging = min(max_hour_charging, energy_needed, space_left)
-                    
-                    # Stanovení důvodu
-                    if planned_charging > 0:
-                        if hour_data['priority'] == 'high':
-                            reason = f"Baterie pod min. úrovní ({min_battery_level} kWh)"
-                        else:
-                            reason = f"Baterie pod cílovou úrovní ({target_battery_level} kWh)"
-                            
-                        # Ověření limitů
-                        if planned_charging == max_hour_charging:
-                            reason += f", limitováno max. výkonem ({max_charging_power} kW)"
-                        elif planned_charging == space_left:
-                            reason += f", limitováno volným místem v baterii"
-                    
-                    # Pokud je plánované nabíjení velmi malé, ignorujeme ho
-                    if planned_charging < 0.1:  # Méně než 100 Wh
-                        planned_charging = 0
-                        reason = "Zanedbatelné množství energie (<0.1 kWh)"
-                    
-                    break
-            
-            # Přidáme plán do výsledku
-            charging_plan.append({
-                'date': date_str,
-                'hour': hour,
-                'planned_charging_kwh': planned_charging
-            })
+            if planned_charging > 0:
+                # Najdeme odpovídající index v seznamech priorit
+                high_idx = next((i for i, h in enumerate(high_priority_hours) if h['date'] == date_str and h['hour'] == hour), None)
+                medium_idx = next((i for i, h in enumerate(medium_priority_hours) if h['date'] == date_str and h['hour'] == hour), None)
+                
+                if high_idx is not None:
+                    reason = f"Baterie pod min. úrovní ({min_battery_level} kWh)"
+                elif medium_idx is not None:
+                    reason = f"Baterie pod cílovou úrovní ({target_battery_level} kWh)"
+                
+                # Ověření limitů
+                if planned_charging == max_charging_power:
+                    reason += f", limitováno max. výkonem ({max_charging_power} kW)"
+                
+                # Kontrola, zda to nebude přeplňovat baterii
+                battery_level = battery_state[i]['battery_level']
+                if battery_level + planned_charging >= battery_capacity * 0.98:  # 98% jako ochranný limit
+                    reason += f", téměř plná baterie"
             
             # Výpis plánu
             plan_str = f"{planned_charging:.2f} kWh" if planned_charging > 0 else "0 kWh (nenabíjí se)"

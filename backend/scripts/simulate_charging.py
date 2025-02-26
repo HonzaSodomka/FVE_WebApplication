@@ -1,5 +1,5 @@
 import psycopg2
-from datetime import datetime
+from datetime import datetime, timedelta
 import logging
 
 logging.basicConfig(
@@ -11,42 +11,55 @@ logging.basicConfig(
 
 logger = logging.getLogger('api')
 
-def should_charge_from_schedule(current_time, house_id, conn, cur):
-    """
-    Zjistí, zda má být v aktuální hodině prováděno plánované nabíjení
-    a vrátí plánované množství energie, které se má nabít.
+def get_prediction_timestamp(current_time, conn, cur):
+    """Najde správný timestamp pro predikci nebo vrátí None pokud jsme mimo rozsah dat"""
+    today = current_time.date()
     
-    Args:
-        current_time: Aktuální čas
-        house_id: ID domu
-        conn: Databázové spojení
-        cur: Kurzor k databázi
+    # Najdeme první a poslední záznam pro dnešek
+    cur.execute("""
+        SELECT timestamp 
+        FROM api_solardata 
+        WHERE DATE(timestamp) = %s
+        ORDER BY timestamp ASC 
+        LIMIT 1
+    """, (today,))
+    first_record = cur.fetchone()
+    
+    cur.execute("""
+        SELECT timestamp 
+        FROM api_solardata 
+        WHERE DATE(timestamp) = %s
+        ORDER BY timestamp DESC 
+        LIMIT 1
+    """, (today,))
+    last_record = cur.fetchone()
+    
+    if not first_record or not last_record:
+        return None
         
-    Returns:
-        Float: Množství energie v kWh, které se má nabít (0 pokud nemá být nabíjení)
-    """
-    try:
-        current_date = current_time.date()
-        current_hour = current_time.hour
+    # Kontrola jestli jsme v rozsahu simulace
+    if current_time < first_record[0].replace(tzinfo=None) or current_time > last_record[0].replace(tzinfo=None):
+        logger.info(f"Aktuální čas {current_time} je mimo čas simulace nabíjení ze solárů {first_record[0]} - {last_record[0]}")
+        return None
         
-        # Zjistíme, zda existuje plán nabíjení pro tuto hodinu
-        cur.execute("""
-            SELECT planned_charging_kwh
-            FROM api_chargingschedule
-            WHERE house_id = %s AND date = %s AND hour = %s
-        """, (house_id, current_date, current_hour))
-        
-        schedule = cur.fetchone()
-        if schedule:
-            return schedule[0]
-        return 0
-    except Exception as e:
-        logger.error(f"Chyba při zjišťování plánu nabíjení pro dům {house_id}: {str(e)}")
-        return 0
+    # Pro čas po posledním hodinovém záznamu použijeme poslední dostupný záznam dne
+    next_hour = (current_time + timedelta(hours=1)).replace(minute=0, second=0, microsecond=0)
+    cur.execute("""
+        SELECT timestamp 
+        FROM api_solardata 
+        WHERE DATE(timestamp) = %s
+        AND timestamp >= %s
+        ORDER BY timestamp ASC 
+        LIMIT 1
+    """, (today, next_hour))
+    next_record = cur.fetchone()
+    
+    return next_record[0] if next_record else last_record[0]
 
-def simulate_grid_charging():
+def simulate_charging():
     try:
-        logger.info("ZAHAJUJI SIMULACI NABÍJENÍ ZE SÍTĚ")
+        logger.info("ZAHAJUJI SIMULACI NABÍJENÍ ZE SOLÁRŮ")
+        
         conn = psycopg2.connect(
             dbname="fve_db",
             user="postgres",
@@ -55,34 +68,22 @@ def simulate_grid_charging():
         )
         cur = conn.cursor()
 
-        current_time = datetime.now().replace(second=0, microsecond=0)
-        current_date = current_time.date()
-        current_hour = current_time.hour
-
-        # Debug log pro načtení ceny
-        logger.info(f"Načítám data o cenách pro datum {current_date} hodina {current_hour}")
+        # Používáme naivní datetime bez timezone
+        current_time = datetime.now().replace(tzinfo=None)
+        prediction_time = get_prediction_timestamp(current_time, conn, cur)
         
-        # Získáme aktuální cenu elektřiny
-        cur.execute("""
-            SELECT price_czk
-            FROM api_pricedata 
-            WHERE date = %s AND hour = %s
-        """, (current_date, current_hour))
-        price_data = cur.fetchone()
-        
-        if not price_data:
-            logger.error(f"Data o cenách nenalezena pro {current_date} {current_hour}:00")
+        if not prediction_time:
+            logger.error("Nelze určit časovou značku predikce")
             return
             
-        price_mwh = price_data[0]  # Cena v Kč/MWh
-        price_kwh = price_mwh / 1000  # Převod na Kč/kWh
-        logger.info(f"Cena pro hodinu {current_hour} je {price_kwh:.3f} Kč/kWh")
-        
+        logger.info(f"Aktuální čas: {current_time}, používá se predikce pro: {prediction_time}h")
+
         # Načteme aktivní domy
         cur.execute("""
             SELECT 
                 id, battery_capacity, current_battery_level,
-                min_battery_level, max_charging_power, charging_efficiency
+                max_charging_power, charging_efficiency, solar_variation,
+                solar_power
             FROM api_house 
             WHERE is_active = true
         """)
@@ -90,135 +91,98 @@ def simulate_grid_charging():
         logger.info(f"Nalezeno {len(houses)} aktivních domů")
         
         for house in houses:
+            (house_id, battery_capacity, current_level, 
+             max_charging_power, charging_eff, solar_variation,
+             solar_power) = house
+
             try:
-                (house_id, battery_capacity, current_level, 
-                 min_battery_level_percent, max_charging_power, charging_eff) = house
+                # Získáme data o výrobě pro danou hodinu
+                cur.execute("""
+                    SELECT watt_hours_period
+                    FROM api_solardata
+                    WHERE timestamp = %s
+                """, (prediction_time,))
+                solar_data = cur.fetchone()
 
-                # Vypočteme minimální úroveň v kWh
-                min_level_kwh = battery_capacity * (min_battery_level_percent / 100)
-                
-                # Inicializace proměnných pro nabíjení
-                emergency_charged_kwh = 0
-                planned_charged_kwh = 0
-                
-                # 1. KONTROLA NOUZOVÉHO NABÍJENÍ (pokud jsme pod minimem)
-                if current_level < min_level_kwh:
-                    # Maximální množství energie za minutu v kWh
-                    max_charge_kwh = max_charging_power / 60
-                    
-                    # Kolik musíme dobít (započítáme ztráty z účinnosti)
-                    needed_kwh = (min_level_kwh - current_level) / (charging_eff / 100)
-                    
-                    # Kolik můžeme nabít tuto minutu
-                    charge_amount = min(
-                        max_charge_kwh,  # Limit nabíjení
-                        needed_kwh       # Kolik chybí do minima (včetně ztrát)
-                    )
-                    
-                    # Aplikujeme účinnost nabíjení
-                    actual_charge = charge_amount * (charging_eff / 100)
-                    emergency_charged_kwh = actual_charge
-                    new_level = current_level + actual_charge
+                if not solar_data:
+                    logger.warning(f"Žádná solární data pro dům {house_id} v čase {prediction_time}")
+                    continue
 
-                    logger.warning(f"""
-                        Dům {house_id} NOUZOVÉ nabíjení:
-                        - Stav baterie pod minimem: {current_level:.2f} kWh < {min_level_kwh:.2f} kWh
-                        - Potřeba dobít: {needed_kwh:.2f} kWh
-                        - Nabito: {charge_amount:.2f} kWh (se ztrátami)
-                        - Reálný přírůstek: {actual_charge:.2f} kWh
-                        - Nový stav baterie: {new_level:.2f} kWh
-                    """)
-                    
-                    # Aktualizujeme stav baterie po nouzovém nabíjení
-                    current_level = new_level
+                # Vyrobená energie za hodinu v Wh (pro 20kWp)
+                period_wh = solar_data[0]
+
+                # Přepočet na instalovaný výkon domu
+                period_wh = period_wh * (solar_power / 20)
+
+                # Aplikujeme variaci
+                actual_period_wh = period_wh * solar_variation if period_wh else 0
                 
-                # 2. KONTROLA PLÁNOVANÉHO NABÍJENÍ
-                planned_charging_kwh = should_charge_from_schedule(current_time, house_id, conn, cur)
-                
-                if planned_charging_kwh > 0:
-                    # Rozdělíme plánované nabíjení na minuty
-                    minute_planned_kwh = planned_charging_kwh / 60
+                # Převod na minutovou výrobu
+                available_wh = actual_period_wh / 60
+
+                # Pokud máme výrobu, pokusíme se nabít baterii
+                if available_wh > 0:
+                    # Omezení nabíjecího výkonu na minutu
+                    max_charging_wh = (max_charging_power * 1000) / 60
                     
-                    # Omezení nabíjecího výkonu za minutu
-                    max_charge_kwh = max_charging_power / 60
+                    # Volné místo v baterii (Wh)
+                    available_space_wh = (battery_capacity - current_level) * 1000
                     
-                    # Dostupný prostor v baterii
-                    available_space = battery_capacity - current_level
-                    
-                    # Kolik můžeme nabít (se ztrátami)
-                    charge_amount = min(
-                        minute_planned_kwh,
-                        max_charge_kwh,
-                        available_space / (charging_eff / 100)
-                    )
-                    
-                    # Aplikujeme účinnost nabíjení
-                    actual_charge = charge_amount * (charging_eff / 100)
-                    planned_charged_kwh = actual_charge
-                    new_level = current_level + actual_charge
-                    
-                    logger.info(f"""
-                        Dům {house_id} PLÁNOVANÉ nabíjení:
-                        - Celkový plán pro hodinu: {planned_charging_kwh:.2f} kWh
-                        - Plán na minutu: {minute_planned_kwh:.4f} kWh
-                        - Nabito: {charge_amount:.4f} kWh (se ztrátami)
-                        - Reálný přírůstek: {actual_charge:.4f} kWh
-                        - Stav baterie: {current_level:.2f} kWh -> {new_level:.2f} kWh
-                    """)
-                    
-                    # Aktualizujeme stav baterie po plánovaném nabíjení
-                    current_level = new_level
-                
-                # 3. VÝPOČET CELKOVÝCH NÁKLADŮ A AKTUALIZACE DATABÁZE
-                total_charged_kwh = emergency_charged_kwh + planned_charged_kwh
-                
-                if total_charged_kwh > 0:
-                    # Výpočet nákladů
-                    total_cost = total_charged_kwh * price_kwh
-                    
-                    # Aktualizace stavu baterie
-                    cur.execute("""
-                        UPDATE api_house 
-                        SET current_battery_level = %s
-                        WHERE id = %s
-                    """, (current_level, house_id))
-                    
-                    # Záznam do ChargingData
-                    cur.execute("""
-                        INSERT INTO api_chargingdata (house_id, date, solar_charged_kwh, grid_charged_kwh, grid_charged_cost)
-                        VALUES (%s, %s, %s, %s, %s)
-                        ON CONFLICT (house_id, date)
-                        DO UPDATE SET 
-                            grid_charged_kwh = api_chargingdata.grid_charged_kwh + EXCLUDED.grid_charged_kwh,
-                            grid_charged_cost = api_chargingdata.grid_charged_cost + EXCLUDED.grid_charged_cost
-                    """, (
-                        house_id, 
-                        current_date,
-                        0,                      # solar_charged_kwh (nemění se)
-                        total_charged_kwh,      # grid_charged_kwh
-                        total_cost              # grid_charged_cost
-                    ))
-                    
-                    logger.info(f"""
-                        Dům {house_id} SOUHRN nabíjení ze sítě:
-                        - Nouzové: {emergency_charged_kwh:.4f} kWh
-                        - Plánované: {planned_charged_kwh:.4f} kWh
-                        - Celkem: {total_charged_kwh:.4f} kWh
-                        - Cena: {total_cost:.2f} Kč
-                        - Konečný stav baterie: {current_level:.2f} kWh
-                    """)
-                else:
-                    logger.info(f"Dům {house_id}: Žádné nabíjení ze sítě neproběhlo")
+                    if available_space_wh > 0:
+                        # Určíme kolik energie můžeme uložit (Wh)
+                        charging_amount_wh = min(
+                            available_wh,         # Solární výroba
+                            max_charging_wh,      # Limit nabíjení
+                            available_space_wh    # Místo v baterii
+                        )
+                        
+                        # Aplikujeme účinnost nabíjení
+                        actual_charge_wh = charging_amount_wh * (charging_eff / 100)
+                        
+                        # Převod na kWh pro uložení
+                        new_level = current_level + (actual_charge_wh / 1000)
+
+                        # Aktualizujeme stav baterie
+                        cur.execute("""
+                            UPDATE api_house 
+                            SET current_battery_level = %s
+                            WHERE id = %s
+                        """, (new_level, house_id))
+
+                        cur.execute("""
+                            INSERT INTO api_chargingdata (house_id, date, solar_charged_kwh, grid_charged_kwh, grid_charged_cost)
+                            VALUES (%s, %s, %s, %s, %s)
+                            ON CONFLICT (house_id, date)
+                            DO UPDATE SET solar_charged_kwh = api_chargingdata.solar_charged_kwh + EXCLUDED.solar_charged_kwh
+                        """, (
+                            house_id, 
+                            current_time.date(),
+                            actual_charge_wh / 1000,  # solar_charged_kwh
+                            0,                        
+                            0                         
+                        ))
+
+                        logger.info(f"""
+                            Dům {house_id} solární nabíjení:
+                            Čas: {current_time} (predikce {prediction_time})
+                            Výkon solárů: {solar_power}kWp
+                            Variace: {solar_variation:.2f}
+                            Energie za hodinu bez variace: {period_wh:.2f}Wh
+                            Energie za hodinu s variací: {actual_period_wh:.2f}Wh
+                            Vyrobeno: {available_wh:.2f}Wh
+                            Reálně dobito: {actual_charge_wh:.2f}Wh
+                            Baterie: {current_level:.2f}kWh -> {new_level:.2f}kWh
+                        """)
 
             except Exception as e:
                 logger.error(f"Chyba při zpracování domu {house_id}: {str(e)}")
                 continue
 
         conn.commit()
-        logger.info("SIMULACE NABÍJENÍ ZE SÍTĚ ÚSPĚŠNĚ DOKONČENA")
+        logger.info("SIMULACE DOBÍJENÍ ZE SOLÁRŮ ÚSPĚŠNĚ DOKONČENA")
 
     except Exception as e:
-        logger.error(f"Simulace nabíjení ze sítě selhala: {str(e)}")
+        logger.error(f"Simulace dobíjení ze solárlů selhala: {str(e)}")
         if 'conn' in locals():
             conn.rollback()
     finally:
@@ -228,4 +192,4 @@ def simulate_grid_charging():
             conn.close()
 
 if __name__ == "__main__":
-    simulate_grid_charging()
+    simulate_charging()

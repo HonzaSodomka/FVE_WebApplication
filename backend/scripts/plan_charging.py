@@ -43,8 +43,17 @@ def get_active_houses():
         if 'conn' in locals():
             conn.close()
 
-def get_price_data():
-    """Získá data o cenách elektřiny pro aktuální a příští den"""
+def get_price_data(current_hour, have_tomorrow_prices=False):
+    """
+    Získá data o cenách elektřiny s ohledem na dostupnost dat o zítřejších cenách
+    
+    Args:
+        current_hour: Aktuální hodina dne (0-23)
+        have_tomorrow_prices: Zda jsou k dispozici ceny na zítřek
+        
+    Returns:
+        Slovník s cenami elektřiny pro aktuální a případně i následující den
+    """
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -57,14 +66,24 @@ def get_price_data():
         current_time = datetime.now()
         today = current_time.date()
         tomorrow = today + timedelta(days=1)
-        current_hour = current_time.hour
 
-        cur.execute("""
-            SELECT date, hour, price_czk 
-            FROM api_pricedata 
-            WHERE (date = %s AND hour >= %s) OR date = %s
-            ORDER BY date, hour
-        """, [today, current_hour, tomorrow])
+        # Upravíme dotaz podle dostupnosti dat o zítřejších cenách
+        if have_tomorrow_prices:
+            # Máme data na zítřek, načteme hodiny od aktuální až do konce zítřka
+            cur.execute("""
+                SELECT date, hour, price_czk 
+                FROM api_pricedata 
+                WHERE (date = %s AND hour >= %s) OR date = %s
+                ORDER BY date, hour
+            """, [today, current_hour, tomorrow])
+        else:
+            # Nemáme data na zítřek, načteme jen hodiny od aktuální do konce dneška
+            cur.execute("""
+                SELECT date, hour, price_czk 
+                FROM api_pricedata 
+                WHERE date = %s AND hour >= %s
+                ORDER BY date, hour
+            """, [today, current_hour])
         
         prices = {}
         rows = cur.fetchall()
@@ -143,8 +162,19 @@ def get_house_data(house_id):
         if 'conn' in locals():
             conn.close()
 
-def get_solar_prediction(house_power, charging_efficiency):
-    """Získá předpověď solární výroby a upraví ji podle výkonu domu a účinnosti nabíjení"""
+def get_solar_prediction(house_power, charging_efficiency, current_hour, have_tomorrow_prices=False):
+    """
+    Získá předpověď solární výroby a upraví ji podle výkonu domu a účinnosti nabíjení
+    
+    Args:
+        house_power: Výkon solárních panelů v kWp
+        charging_efficiency: Účinnost nabíjení v procentech
+        current_hour: Aktuální hodina dne (0-23)
+        have_tomorrow_prices: Zda jsou k dispozici ceny na zítřek
+        
+    Returns:
+        Slovník s predikovanou solární výrobou pro aktuální a případně i následující den
+    """
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -157,15 +187,25 @@ def get_solar_prediction(house_power, charging_efficiency):
         current_time = datetime.now()
         today = current_time.date()
         tomorrow = today + timedelta(days=1)
-        current_hour = current_time.hour
 
-        cur.execute("""
-            SELECT timestamp, watt_hours_period
-            FROM api_solardata 
-            WHERE (DATE(timestamp) = %s AND EXTRACT(HOUR FROM timestamp) >= %s) 
-               OR DATE(timestamp) = %s
-            ORDER BY timestamp
-        """, [today, current_hour, tomorrow])
+        # Upravíme dotaz podle dostupnosti dat o zítřejších cenách
+        if have_tomorrow_prices:
+            # Máme data na zítřek, načteme hodiny od aktuální až do konce zítřka
+            cur.execute("""
+                SELECT timestamp, watt_hours_period
+                FROM api_solardata 
+                WHERE (DATE(timestamp) = %s AND EXTRACT(HOUR FROM timestamp) >= %s) 
+                   OR DATE(timestamp) = %s
+                ORDER BY timestamp
+            """, [today, current_hour, tomorrow])
+        else:
+            # Nemáme data na zítřek, načteme jen hodiny od aktuální do konce dneška
+            cur.execute("""
+                SELECT timestamp, watt_hours_period
+                FROM api_solardata 
+                WHERE DATE(timestamp) = %s AND EXTRACT(HOUR FROM timestamp) >= %s
+                ORDER BY timestamp
+            """, [today, current_hour])
         
         production = {}
         rows = cur.fetchall()
@@ -227,8 +267,18 @@ def get_solar_prediction(house_power, charging_efficiency):
         if 'conn' in locals():
             conn.close()
 
-def get_consumption_prediction(house_id):
-    """Získá předpověď spotřeby domu na základě historických dat"""
+def get_consumption_prediction(house_id, current_hour, have_tomorrow_prices=False):
+    """
+    Získá předpověď spotřeby domu na základě historických dat
+    
+    Args:
+        house_id: ID domu
+        current_hour: Aktuální hodina dne (0-23)
+        have_tomorrow_prices: Zda jsou k dispozici ceny na zítřek
+        
+    Returns:
+        Slovník s predikovanou spotřebou pro aktuální a případně i následující den
+    """
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -241,7 +291,6 @@ def get_consumption_prediction(house_id):
         current_time = datetime.now()
         today = current_time.date()
         tomorrow = today + timedelta(days=1)
-        current_hour = current_time.hour
         
         # Zjistíme typ dnů (víkend/všední)
         is_today_weekend = today.weekday() >= 5
@@ -294,10 +343,8 @@ def get_consumption_prediction(house_id):
             averages[day_type][int(hour)] = avg_consumption
         
         # Vytvoříme predikci jen pro požadované hodiny
-        prediction = {
-            today.strftime('%Y-%m-%d'): {},
-            tomorrow.strftime('%Y-%m-%d'): {}
-        }
+        prediction = {}
+        prediction[today.strftime('%Y-%m-%d')] = {}
         
         # Pro dnešek od aktuální hodiny
         today_type = 'weekend' if is_today_weekend else 'weekday'
@@ -305,11 +352,13 @@ def get_consumption_prediction(house_id):
             consumption = averages[today_type].get(hour, 0)
             prediction[today.strftime('%Y-%m-%d')][hour] = consumption
             
-        # Pro zítřek všechny hodiny
-        tomorrow_type = 'weekend' if is_tomorrow_weekend else 'weekday'
-        for hour in range(24):
-            consumption = averages[tomorrow_type].get(hour, 0)
-            prediction[tomorrow.strftime('%Y-%m-%d')][hour] = consumption
+        # Pro zítřek všechny hodiny, jen pokud máme ceny na zítřek
+        if have_tomorrow_prices:
+            prediction[tomorrow.strftime('%Y-%m-%d')] = {}
+            tomorrow_type = 'weekend' if is_tomorrow_weekend else 'weekday'
+            for hour in range(24):
+                consumption = averages[tomorrow_type].get(hour, 0)
+                prediction[tomorrow.strftime('%Y-%m-%d')][hour] = consumption
             
         logger.info(f"NAČÍTÁNÍ PREDIKCE SPOTŘEBY: Zpracováno {len(rows)} hodinových průměrů")
         
@@ -412,7 +461,7 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
         # Získání parametrů domu
         battery_capacity = house_data['battery_capacity']
         min_battery_level_percent = house_data['min_battery_level']
-        min_battery_level = battery_capacity * (min_battery_level_percent / 100)
+        min_battery_level_base = battery_capacity * (min_battery_level_percent / 100)
         max_charging_power = house_data['max_charging_power']
         charging_efficiency = house_data['charging_efficiency'] / 100
         risk_level = house_data['risk_level']
@@ -424,19 +473,38 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
             'HIGH': 30      # Agresivní - nabíjí jen do 30%, sází na levnější ceny později
         }[risk_level]
         
+        # Nové parametry - bezpečnostní rezerva nad minimální úrovní
+        safety_factor = {
+            'LOW': 2.0,     # 100% rezerva nad minimem (velmi konzervativní)
+            'MEDIUM': 1.5,  # 50% rezerva nad minimem (vyvážený přístup)
+            'HIGH': 1.2     # 20% rezerva nad minimem (agresivnější přístup)
+        }[risk_level]
+        
+        # Faktor pro navýšení plánovaného nabíjení
+        energy_boost_factor = {
+            'LOW': 1.3,     # 30% energie navíc
+            'MEDIUM': 1.15, # 15% energie navíc
+            'HIGH': 1.05    # 5% energie navíc
+        }[risk_level]
+        
+        # Aplikace bezpečnostní rezervy na minimální úroveň
+        effective_min_level = min_battery_level_base * safety_factor
+        
         # Výpočet cílového stavu baterie
         target_battery_level = battery_capacity * (target_level_percent / 100)
         
         print(f"\nPARAMETRY DOMU:")
         print(f"- Kapacita baterie: {battery_capacity} kWh")
         print(f"- Aktuální stav baterie: {house_data['current_battery_level']} kWh ({(house_data['current_battery_level']/battery_capacity*100):.1f}%)")
-        print(f"- Minimální úroveň: {min_battery_level} kWh ({min_battery_level_percent}%)")
+        print(f"- Základní minimální úroveň: {min_battery_level_base} kWh ({min_battery_level_percent}%)")
+        print(f"- Efektivní minimální úroveň (s rezervou): {effective_min_level} kWh ({(effective_min_level/battery_capacity*100):.1f}%)")
         print(f"- Cílová úroveň dle rizika '{risk_level}': {target_battery_level} kWh ({target_level_percent}%)")
         print(f"- Max. nabíjecí výkon: {max_charging_power} kW")
         print(f"- Účinnost nabíjení: {charging_efficiency*100}%")
+        print(f"- Faktor navýšení energie: {energy_boost_factor}")
         
-        logger.info(f"OPTIMALIZACE NABÍJENÍ: Parametry - Kapacita: {battery_capacity}kWh, Min: {min_battery_level}kWh, " + 
-                    f"Target: {target_battery_level}kWh, Max výkon: {max_charging_power}kW")
+        logger.info(f"OPTIMALIZACE NABÍJENÍ: Parametry - Kapacita: {battery_capacity}kWh, Min: {min_battery_level_base}kWh, " + 
+                    f"Efektivní min: {effective_min_level}kWh, Target: {target_battery_level}kWh, Max výkon: {max_charging_power}kW")
         
         # Simulovaný stav baterie pro každou hodinu bez dodatečného nabíjení
         simulated_battery_levels = [house_data['current_battery_level']]
@@ -452,9 +520,9 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
         
         # Výpis původní predikce stavu baterie
         print("\nPREDIKCE STAVU BATERIE BEZ DODATEČNÉHO NABÍJENÍ:")
-        print("-" * 100)
-        print(f"{'Datum a čas':<20} {'Solární energie':<18} {'Spotřeba':<14} {'Stav baterie':<16} {'Pod minimem':<15} {'Pod cílem':<15} {'Cena (Kč/kWh)':<15}")
-        print("-" * 100)
+        print("-" * 120)
+        print(f"{'Datum a čas':<20} {'Solární energie':<18} {'Spotřeba':<14} {'Stav baterie':<16} {'Pod zákl. min.':<15} {'Pod efekt. min.':<15} {'Pod cílem':<15} {'Cena (Kč/kWh)':<15}")
+        print("-" * 120)
         
         # Definice hodin pro analýzu
         hours_info = []
@@ -467,7 +535,8 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
             
             # Kontrola stavu baterie
             battery_level = simulated_battery_levels[i]
-            under_min = "ANO" if battery_level < min_battery_level else "NE"
+            under_base_min = "ANO" if battery_level < min_battery_level_base else "NE"
+            under_effective_min = "ANO" if battery_level < effective_min_level else "NE"
             under_target = "ANO" if battery_level < target_battery_level else "NE"
             
             hours_info.append({
@@ -478,20 +547,21 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
                 'solar_kwh': state['solar_kwh'],
                 'consumption_kwh': state['consumption_kwh'],
                 'battery_level': battery_level,
-                'under_min': battery_level < min_battery_level,
+                'under_base_min': battery_level < min_battery_level_base,
+                'under_effective_min': battery_level < effective_min_level,
                 'under_target': battery_level < target_battery_level,
                 'price': price
             })
             
-            print(f"{state['datetime']:<20} {state['solar_kwh']*1000:>6.1f} Wh        {state['consumption_kwh']*1000:>6.1f} Wh     {battery_level:>6.2f} kWh      {under_min:<15} {under_target:<15} {price:>6.2f} Kč/kWh")
+            print(f"{state['datetime']:<20} {state['solar_kwh']*1000:>6.1f} Wh        {state['consumption_kwh']*1000:>6.1f} Wh     {battery_level:>6.2f} kWh      {under_base_min:<15} {under_effective_min:<15} {under_target:<15} {price:>6.2f} Kč/kWh")
         
-        # Identifikace kritických bodů (kde baterie klesá pod minimum)
+        # Identifikace kritických bodů (kde baterie klesá pod EFEKTIVNÍ minimum)
         critical_points = []
         for i in range(len(hours_info)):
-            if hours_info[i]['under_min']:
+            if hours_info[i]['under_effective_min']:  # Použití efektivního minima
                 # Najdeme sekvenci kritických bodů
                 sequence_start = i
-                while i < len(hours_info) and hours_info[i]['under_min']:
+                while i < len(hours_info) and hours_info[i]['under_effective_min']:
                     i += 1
                 sequence_end = i - 1
                 
@@ -505,19 +575,20 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
                     'end_idx': sequence_end,
                     'min_idx': min_idx,
                     'min_level': min_level,
-                    'energy_needed': min_battery_level - min_level,
+                    'energy_needed': (effective_min_level - min_level) * energy_boost_factor,  # Přidáváme boost faktor
                     'hours': [hours_info[j] for j in range(sequence_start, sequence_end + 1)]
                 })
         
         # Výpis kritických bodů
         if critical_points:
-            print("\nKRITICKÉ BODY (SEKVENCE POD MINIMEM):")
+            print("\nKRITICKÉ BODY (SEKVENCE POD EFEKTIVNÍM MINIMEM):")
             for i, point in enumerate(critical_points):
                 print(f"Kritický bod #{i+1}: {hours_info[point['start_idx']]['datetime']} - " +
                       f"{hours_info[point['end_idx']]['datetime']} " +
-                      f"(min: {point['min_level']:.2f} kWh, potřeba: {point['energy_needed']:.2f} kWh)")
+                      f"(min: {point['min_level']:.2f} kWh, potřeba: {point['energy_needed']:.2f} kWh " +
+                      f"[základní: {effective_min_level - point['min_level']:.2f} kWh + rezerva: {point['energy_needed'] - (effective_min_level - point['min_level']):.2f} kWh])")
         else:
-            print("\nŽádné kritické body (baterie neklesá pod minimum).")
+            print("\nŽádné kritické body (baterie neklesá pod efektivní minimum).")
         
         # Vytvoření prázdného plánu nabíjení
         charging_plan = [{
@@ -543,7 +614,7 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
             # Kolik energie potřebujeme dodat
             energy_needed = point['energy_needed']
             
-            print(f"\nKritický bod #{point_idx+1}: Potřeba dobít {energy_needed:.2f} kWh do minima")
+            print(f"\nKritický bod #{point_idx+1}: Potřeba dobít {energy_needed:.2f} kWh do efektivního minima")
             
             # Najdeme všechny dostupné hodiny před tímto kritickým bodem
             available_hours = []
@@ -579,7 +650,7 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
                 
                 if emergency_amount > 0:
                     charging_plan[emergency_idx]['planned_charging_kwh'] = emergency_amount
-                    charging_plan[emergency_idx]['reason'] = f"NOUZOVÉ NABÍJENÍ: baterie pod min. úrovní ({min_battery_level} kWh)"
+                    charging_plan[emergency_idx]['reason'] = f"NOUZOVÉ NABÍJENÍ: baterie pod efekt. min. úrovní ({effective_min_level} kWh)"
                     
                     # Aktualizujeme stav baterie
                     update_battery_levels(emergency_idx, emergency_amount)
@@ -589,10 +660,10 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
                     # Přepočítáme energii potřebnou pro další kritické body
                     for future_point in critical_points[point_idx+1:]:
                         for j in range(future_point['start_idx'], future_point['end_idx'] + 1):
-                            if updated_battery_levels[j] < min_battery_level:
-                                future_point['energy_needed'] = min_battery_level - min(
+                            if updated_battery_levels[j] < effective_min_level:
+                                future_point['energy_needed'] = (effective_min_level - min(
                                     updated_battery_levels[k] for k in range(future_point['start_idx'], future_point['end_idx'] + 1)
-                                )
+                                )) * energy_boost_factor
                                 break
                             else:
                                 future_point['energy_needed'] = 0
@@ -633,7 +704,7 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
                         
                         # Při první změně nastavíme důvod
                         if existing_plan == 0:
-                            charging_plan[idx]['reason'] = f"Baterie pod min. úrovní ({min_battery_level} kWh)"
+                            charging_plan[idx]['reason'] = f"Baterie pod efekt. min. úrovní ({effective_min_level} kWh)"
                         
                         # Aktualizujeme zbývající energii k plánování
                         energy_to_plan -= plan_amount
@@ -658,7 +729,7 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
                     if emergency_amount > 0.1:
                         new_total = charging_plan[emergency_idx]['planned_charging_kwh'] + emergency_amount
                         charging_plan[emergency_idx]['planned_charging_kwh'] = new_total
-                        charging_plan[emergency_idx]['reason'] = f"NOUZOVÉ NABÍJENÍ: baterie pod min. úrovní ({min_battery_level} kWh)"
+                        charging_plan[emergency_idx]['reason'] = f"NOUZOVÉ NABÍJENÍ: baterie pod efekt. min. úrovní ({effective_min_level} kWh)"
                         
                         # Aktualizujeme stav baterie
                         update_battery_levels(emergency_idx, emergency_amount)
@@ -668,8 +739,8 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
             # Přepočítáme energii potřebnou pro další kritické body
             for future_point in critical_points[point_idx+1:]:
                 min_level_in_point = min(updated_battery_levels[j] for j in range(future_point['start_idx'], future_point['end_idx'] + 1))
-                if min_level_in_point < min_battery_level:
-                    future_point['energy_needed'] = min_battery_level - min_level_in_point
+                if min_level_in_point < effective_min_level:
+                    future_point['energy_needed'] = (effective_min_level - min_level_in_point) * energy_boost_factor
                 else:
                     future_point['energy_needed'] = 0
         
@@ -754,16 +825,26 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
         
         # Zkontrolujeme, zda po všech úpravách stále neklesne baterie pod minimum
         remaining_critical = False
+        remaining_effective_critical = False
         for i, level in enumerate(updated_battery_levels):
-            if level < min_battery_level:
+            if level < min_battery_level_base:
                 if not remaining_critical:
-                    print(f"\nVAROVÁNÍ: I po optimalizaci existují hodiny pod minimální úrovní:")
+                    print(f"\nVAROVÁNÍ: I po optimalizaci existují hodiny pod ZÁKLADNÍ minimální úrovní:")
                     remaining_critical = True
                 
-                print(f"{hours_info[i]['datetime']}: {level:.2f} kWh < {min_battery_level:.2f} kWh (min)")
+                print(f"{hours_info[i]['datetime']}: {level:.2f} kWh < {min_battery_level_base:.2f} kWh (základní min)")
+            elif level < effective_min_level:
+                if not remaining_effective_critical and not remaining_critical:
+                    print(f"\nVAROVÁNÍ: I po optimalizaci existují hodiny pod EFEKTIVNÍ minimální úrovní:")
+                    remaining_effective_critical = True
+                
+                if not remaining_critical:  # Abychom zabránili duplicitám
+                    print(f"{hours_info[i]['datetime']}: {level:.2f} kWh < {effective_min_level:.2f} kWh (efektivní min)")
         
-        if not remaining_critical:
-            print(f"\nOPTIMALIZACE ÚSPĚŠNÁ: Baterie nikdy neklesne pod minimální úroveň.")
+        if not remaining_critical and not remaining_effective_critical:
+            print(f"\nOPTIMALIZACE ÚSPĚŠNÁ: Baterie nikdy neklesne pod efektivní minimální úroveň.")
+        elif not remaining_critical:
+            print(f"\nÚSPĚŠNÉ ZAJIŠTĚNÍ ZÁKLADNÍHO MINIMA: Baterie neklesne pod základní minimální úroveň, ale v některých případech nebylo možné dosáhnout efektivní minimální úrovně.")
         
         # Výpis finálního stavu baterie a plánu nabíjení
         print("\nFINÁLNÍ STAV BATERIE PO NAPLÁNOVANÉM NABÍJENÍ:")
@@ -818,6 +899,7 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
 def save_charging_schedule(house_id, charging_plan):
     """
     Uloží plán nabíjení do databáze.
+    Nahrazuje stávající plány pro daný dům.
     """
     try:
         conn = psycopg2.connect(
@@ -852,6 +934,7 @@ def save_charging_schedule(house_id, charging_plan):
         
         conn.commit()
         logger.info(f"ULOŽEN PLÁN NABÍJENÍ: {saved_count} záznamů pro dům {house_id}")
+        print(f"Úspěšně uloženo {saved_count} plánů nabíjení do databáze")
         
     except Exception as e:
         logger.error(f"CHYBA PŘI UKLÁDÁNÍ PLÁNU NABÍJENÍ: {str(e)}")
@@ -864,26 +947,43 @@ def save_charging_schedule(house_id, charging_plan):
             cur.close()
         if 'conn' in locals():
             conn.close()
-    
-    print("UKLÁDÁNÍ PLÁNU DO DATABÁZE ZATÍM ZAKOMENTOVÁNO PRO TESTOVÁNÍ")
 
 def plan_charging_for_house(house_id):
     """
     Kompletní proces plánování nabíjení pro jeden dům.
+    Zohledňuje dostupnost dat o cenách elektřiny (k dispozici v 17:00 na další den).
     """
     try:
         print("\n" + "*"*100)
         print(f"ZAČÁTEK PLÁNOVÁNÍ NABÍJENÍ PRO DŮM {house_id}")
         print("*"*100)
         
-        # 1. Získání dat o domu
+        # 1. Zjistíme aktuální čas
+        current_time = datetime.now()
+        current_hour = current_time.hour
+        current_date = current_time.date()
+        tomorrow = current_date + timedelta(days=1)
+        
+        # Určíme, zda máme k dispozici data o cenách elektřiny na zítřek
+        have_tomorrow_prices = current_hour >= 17  # Po 17. hodině máme ceny na zítřek
+        
+        if have_tomorrow_prices:
+            print(f"Aktuální čas: {current_time.strftime('%H:%M')} - Máme k dispozici ceny na zítřek")
+            planning_horizon = f"od {current_date.strftime('%Y-%m-%d')} {current_hour}:00 do {tomorrow.strftime('%Y-%m-%d')} 23:59"
+        else:
+            print(f"Aktuální čas: {current_time.strftime('%H:%M')} - Ceny na zítřek ještě nejsou k dispozici")
+            planning_horizon = f"od {current_date.strftime('%Y-%m-%d')} {current_hour}:00 do {current_date.strftime('%Y-%m-%d')} 23:59"
+        
+        print(f"Plánovací horizont: {planning_horizon}")
+        
+        # 2. Získání dat o domu
         print("\nKROK 1: NAČÍTÁNÍ DAT O DOMU")
         house_data = get_house_data(house_id)
         if not house_data:
             logger.error(f"PLÁNOVÁNÍ NABÍJENÍ: Dům {house_id} nenalezen")
             print(f"CHYBA: Dům {house_id} nenalezen!")
             return False
-        
+            
         print(f"Úspěšně načtena data o domu {house_id}:")
         print(f"- Riziko: {house_data['risk_level']}")
         print(f"- Solární výkon: {house_data['solar_power']} kWp")
@@ -892,43 +992,51 @@ def plan_charging_for_house(house_id):
         print(f"- Min. úroveň: {house_data['min_battery_level']}%")
         print(f"- Max. nabíjecí výkon: {house_data['max_charging_power']} kW")
         print(f"- Účinnost nabíjení: {house_data['charging_efficiency']}%")
-            
-        # 2. Získání predikce solární výroby
+        
+        # 3. Získání predikce solární výroby
         print("\nKROK 2: ZÍSKÁNÍ PREDIKCE SOLÁRNÍ VÝROBY")
         solar_prediction = get_solar_prediction(
             house_power=house_data['solar_power'],
-            charging_efficiency=house_data['charging_efficiency']
+            charging_efficiency=house_data['charging_efficiency'],
+            current_hour=current_hour,
+            have_tomorrow_prices=have_tomorrow_prices
         )
         
         if not solar_prediction:
             print("VAROVÁNÍ: Žádná data o solární výrobě nebyla nalezena!")
         else:
             days = len(solar_prediction)
-            total_hours = sum(len(hours) for hours in solar_prediction.values()),
-            print(f"Úspěšně načtena predikce solární výroby pro {days} dnů ({total_hours} hodin)")
-
-        # 3. Získání predikce spotřeby
+            total_hours = sum(len(hours) for hours in solar_prediction.values())
+            print(f"Úspěšně načtena predikce solární výroby pro {days} {'dny' if days > 1 else 'den'} ({total_hours} hodin)")
+        
+        # 4. Získání predikce spotřeby
         print("\nKROK 3: ZÍSKÁNÍ PREDIKCE SPOTŘEBY")
-        consumption_prediction = get_consumption_prediction(house_id)
+        consumption_prediction = get_consumption_prediction(
+            house_id, 
+            current_hour=current_hour,
+            have_tomorrow_prices=have_tomorrow_prices
+        )
         
         if not consumption_prediction:
             print("VAROVÁNÍ: Žádná data o spotřebě nebyla nalezena!")
         else:
             days = len(consumption_prediction)
             total_hours = sum(len(hours) for hours in consumption_prediction.values())
-            print(f"Úspěšně načtena predikce spotřeby pro {days} dnů ({total_hours} hodin)")
-            
+            print(f"Úspěšně načtena predikce spotřeby pro {days} {'dny' if days > 1 else 'den'} ({total_hours} hodin)")
         
-        # 4. Získání cen elektřiny
+        # 5. Získání cen elektřiny
         print("\nKROK 4: ZÍSKÁNÍ CEN ELEKTŘINY")
-        price_data = get_price_data()
+        price_data = get_price_data(
+            current_hour=current_hour,
+            have_tomorrow_prices=have_tomorrow_prices
+        )
         
         if not price_data:
             print("VAROVÁNÍ: Žádná data o cenách elektřiny nebyla nalezena!")
         else:
             days = len(price_data)
             total_hours = sum(len(hours) for hours in price_data.values())
-            print(f"Úspěšně načteny ceny elektřiny pro {days} dnů ({total_hours} hodin)")
+            print(f"Úspěšně načteny ceny elektřiny pro {days} {'dny' if days > 1 else 'den'} ({total_hours} hodin)")
             
             # Ukázka cen
             print("\nUkázka cen elektřiny (10 nejlevnějších hodin):")
@@ -941,7 +1049,7 @@ def plan_charging_for_house(house_id):
             for date_str, hour, price in flat_prices[:10]:
                 print(f"{date_str} {hour:02d}:00: {price:.3f} Kč/kWh")
         
-        # 5. Predikce stavu baterie
+        # 6. Predikce stavu baterie
         print("\nKROK 5: PREDIKCE STAVU BATERIE")
         battery_state = predict_battery_state(
             house_id,
@@ -950,7 +1058,7 @@ def plan_charging_for_house(house_id):
             consumption_prediction
         )
         
-        # 6. Optimalizace plánu nabíjení
+        # 7. Optimalizace plánu nabíjení
         print("\nKROK 6: OPTIMALIZACE PLÁNU NABÍJENÍ")
         charging_plan = optimize_charging(
             house_id,
@@ -959,10 +1067,9 @@ def plan_charging_for_house(house_id):
             house_data
         )
         
-        # 7. Uložení plánu do databáze
+        # 8. Uložení plánu do databáze
         print("\nKROK 7: ULOŽENÍ PLÁNU DO DATABÁZE")
-        print("UKLÁDÁNÍ PLÁNU DO DATABÁZE ZATÍM ZAKOMENTOVÁNO PRO TESTOVÁNÍ")
-        # save_charging_schedule(house_id, charging_plan)
+        save_charging_schedule(house_id, charging_plan)
         
         print("\n" + "*"*100)
         print(f"KONEC PLÁNOVÁNÍ NABÍJENÍ PRO DŮM {house_id}")
@@ -996,5 +1103,3 @@ if __name__ == "__main__":
     except Exception as e:
         logger.error(f"KRITICKÁ CHYBA PŘI PLÁNOVÁNÍ NABÍJENÍ: {str(e)}")
         print(f"KRITICKÁ CHYBA: {str(e)}")
-        
-        

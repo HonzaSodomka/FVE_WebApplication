@@ -216,7 +216,7 @@ def get_solar_prediction(house_power, charging_efficiency, current_hour, have_to
         # Vytvoříme pole s hodinovými výrobami
         hours_map = {}
         for timestamp, wh in rows:
-            print(f"{timestamp}")
+            print(f"{timestamp}, {wh}")
             hour = timestamp.hour
             effective_hour = hour
             
@@ -399,9 +399,6 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
         solar_production = solar_production[:n_hours]
         consumption = consumption[:n_hours]
         prices = prices[:n_hours]
-
-        print (f"{solar_production}")
-        print (f"{prices}")
 
         # Parametry baterie
         battery_capacity = house_data['battery_capacity']

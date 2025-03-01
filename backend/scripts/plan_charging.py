@@ -466,27 +466,28 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
         charging_efficiency = house_data['charging_efficiency'] / 100
         risk_level = house_data['risk_level']
         
-        # Nastavení parametrů podle rizikové úrovně
-        # Nové hodnoty bezpečnostních faktorů
-        safety_factor = {
-            'LOW': 3.0,     # 200% rezerva nad minimem (velmi konzervativní)
-            'MEDIUM': 2.0,  # 100% rezerva nad minimem (bezpečný vyvážený přístup)
-            'HIGH': 1.5     # 50% rezerva nad minimem (stále dostatečná rezerva)
-        }[risk_level]
+        # Nastavení efektivní minimální úrovně podle rizikové úrovně
+        # jako procento celkové kapacity baterie
+        risk_levels_percent = {
+            'LOW': 50.0,    # Konzervativní přístup - 50% kapacity
+            'MEDIUM': 25.0, # Vyvážený přístup - 25% kapacity
+            'HIGH': 10.0    # Agresivní optimalizace - 10% kapacity
+        }
         
-        # Nové parametry - bezpečnostní rezerva nad minimální úrovní
-        effective_min_level = min_battery_level_base * safety_factor
+        # Výpočet efektivní minimální úrovně v kWh
+        effective_min_percent = risk_levels_percent[risk_level]
+        effective_min_level = battery_capacity * (effective_min_percent / 100)
         
         print(f"\nPARAMETRY DOMU:")
         print(f"- Kapacita baterie: {battery_capacity} kWh")
         print(f"- Aktuální stav baterie: {house_data['current_battery_level']} kWh ({(house_data['current_battery_level']/battery_capacity*100):.1f}%)")
         print(f"- Základní minimální úroveň: {min_battery_level_base} kWh ({min_battery_level_percent}%)")
-        print(f"- Efektivní minimální úroveň (s rezervou): {effective_min_level} kWh ({(effective_min_level/battery_capacity*100):.1f}%)")
+        print(f"- Efektivní minimální úroveň: {effective_min_level} kWh ({effective_min_percent}% kapacity)")
         print(f"- Max. nabíjecí výkon: {max_charging_power} kW")
         print(f"- Účinnost nabíjení: {charging_efficiency*100}%")
         
         logger.info(f"OPTIMALIZACE NABÍJENÍ: Parametry - Kapacita: {battery_capacity}kWh, Min: {min_battery_level_base}kWh, " + 
-                    f"Efektivní min: {effective_min_level}kWh, Max výkon: {max_charging_power}kW")
+                    f"Efektivní min: {effective_min_level}kWh ({effective_min_percent}%), Max výkon: {max_charging_power}kW")
         
         # Simulovaný stav baterie pro každou hodinu bez dodatečného nabíjení
         simulated_battery_levels = [house_data['current_battery_level']]
@@ -726,8 +727,6 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
                     future_point['energy_needed'] = (effective_min_level - min_level_in_point) * 1.05  # Malá rezerva
                 else:
                     future_point['energy_needed'] = 0
-        
-        # ODSTRANĚNO: Celá sekce pro nabíjení na cílovou úroveň na konci dne
         
         # Zkontrolujeme, zda po všech úpravách stále neklesne baterie pod minimum
         remaining_critical = False

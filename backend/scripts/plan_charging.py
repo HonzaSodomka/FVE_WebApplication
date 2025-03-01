@@ -398,7 +398,10 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
         solar_production = solar_production[:n_hours]
         consumption = consumption[:n_hours]
         prices = prices[:n_hours]
-        
+
+        print (f"{solar_production}")
+        print (f"{prices}")
+
         # Parametry baterie
         battery_capacity = house_data['battery_capacity']
         min_battery_level_pct = house_data['min_battery_level']

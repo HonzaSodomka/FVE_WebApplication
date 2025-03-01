@@ -188,6 +188,8 @@ def get_solar_prediction(house_power, charging_efficiency, current_hour, have_to
         today = current_time.date()
         tomorrow = today + timedelta(days=1)
 
+        print(f"{have_tomorrow_prices}")
+
         # Upravíme dotaz podle dostupnosti dat o zítřejších cenách
         if have_tomorrow_prices:
             # Máme data na zítřek, načteme hodiny od aktuální až do konce zítřka

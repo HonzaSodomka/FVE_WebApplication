@@ -478,16 +478,24 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
         effective_min_percent = risk_levels_percent[risk_level]
         effective_min_level = battery_capacity * (effective_min_percent / 100)
         
+        # Výpočet cílové úrovně nabíjení (s 5% bufferem)
+        buffer_percent = 5.0  # 5% buffer nad minimální úroveň
+        target_min_percent = effective_min_percent + buffer_percent
+        target_min_level = battery_capacity * (target_min_percent / 100)
+        
         print(f"\nPARAMETRY DOMU:")
         print(f"- Kapacita baterie: {battery_capacity} kWh")
         print(f"- Aktuální stav baterie: {house_data['current_battery_level']} kWh ({(house_data['current_battery_level']/battery_capacity*100):.1f}%)")
         print(f"- Základní minimální úroveň: {min_battery_level_base} kWh ({min_battery_level_percent}%)")
         print(f"- Efektivní minimální úroveň: {effective_min_level} kWh ({effective_min_percent}% kapacity)")
+        print(f"- Cílová úroveň nabíjení: {target_min_level} kWh ({target_min_percent}% kapacity)")
         print(f"- Max. nabíjecí výkon: {max_charging_power} kW")
         print(f"- Účinnost nabíjení: {charging_efficiency*100}%")
         
         logger.info(f"OPTIMALIZACE NABÍJENÍ: Parametry - Kapacita: {battery_capacity}kWh, Min: {min_battery_level_base}kWh, " + 
-                    f"Efektivní min: {effective_min_level}kWh ({effective_min_percent}%), Max výkon: {max_charging_power}kW")
+                    f"Efektivní min: {effective_min_level}kWh ({effective_min_percent}%), " +
+                    f"Cílová úroveň: {target_min_level}kWh ({target_min_percent}%), " +
+                    f"Max výkon: {max_charging_power}kW")
         
         # Simulovaný stav baterie pro každou hodinu bez dodatečného nabíjení
         simulated_battery_levels = [house_data['current_battery_level']]
@@ -539,7 +547,7 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
         # Identifikace kritických bodů (kde baterie klesá pod EFEKTIVNÍ minimum)
         critical_points = []
         for i in range(len(hours_info)):
-            if hours_info[i]['under_effective_min']:  # Použití efektivního minima
+            if hours_info[i]['under_effective_min']:  # Použití efektivního minima (např. 25%)
                 # Najdeme sekvenci kritických bodů
                 sequence_start = i
                 while i < len(hours_info) and hours_info[i]['under_effective_min']:
@@ -556,7 +564,8 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
                     'end_idx': sequence_end,
                     'min_idx': min_idx,
                     'min_level': min_level,
-                    'energy_needed': (effective_min_level - min_level) * 1.05,  # Malá rezerva pro jistotu
+                    # Cílová úroveň je nyní target_min_level (s 5% bufferem)
+                    'energy_needed': (target_min_level - min_level),
                     'hours': [hours_info[j] for j in range(sequence_start, sequence_end + 1)]
                 })
         
@@ -597,7 +606,7 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
             # Úprava: Přepočet s účinností nabíjení - potřebujeme dodat více, protože část se ztratí
             energy_needed_with_efficiency = energy_needed / charging_efficiency
             
-            print(f"\nKritický bod #{point_idx+1}: Potřeba dobít {energy_needed:.2f} kWh do efektivního minima")
+            print(f"\nKritický bod #{point_idx+1}: Potřeba dobít {energy_needed:.2f} kWh do cílové úrovně ({target_min_percent}%)")
             print(f"  Se započítáním účinnosti nabíjení ({charging_efficiency*100:.0f}%): {energy_needed_with_efficiency:.2f} kWh")
             
             # Najdeme všechny dostupné hodiny před tímto kritickým bodem
@@ -645,9 +654,9 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
                     for future_point in critical_points[point_idx+1:]:
                         for j in range(future_point['start_idx'], future_point['end_idx'] + 1):
                             if updated_battery_levels[j] < effective_min_level:
-                                future_point['energy_needed'] = (effective_min_level - min(
+                                future_point['energy_needed'] = (target_min_level - min(
                                     updated_battery_levels[k] for k in range(future_point['start_idx'], future_point['end_idx'] + 1)
-                                )) * 1.05  # Malá rezerva
+                                ))
                                 break
                             else:
                                 future_point['energy_needed'] = 0
@@ -724,7 +733,8 @@ def optimize_charging(house_id, battery_state, price_data, house_data):
             for future_point in critical_points[point_idx+1:]:
                 min_level_in_point = min(updated_battery_levels[j] for j in range(future_point['start_idx'], future_point['end_idx'] + 1))
                 if min_level_in_point < effective_min_level:
-                    future_point['energy_needed'] = (effective_min_level - min_level_in_point) * 1.05  # Malá rezerva
+                    # Aktualizujeme energy_needed podle cílové úrovně (s bufferem)
+                    future_point['energy_needed'] = (target_min_level - min_level_in_point)
                 else:
                     future_point['energy_needed'] = 0
         

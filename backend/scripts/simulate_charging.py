@@ -253,22 +253,50 @@ def simulate_combined_charging():
                         """)
 
                 # Část 4: CELKOVÉ NABÍJENÍ A APLIKACE ÚČINNOSTI
-                # Celková energie pro nabíjení před započtením účinnosti
-                total_charging_kwh = (solar_charging_wh / 1000) + emergency_grid_charging_kwh + planned_grid_charging_minute_kwh
-                
-                # Aplikujeme účinnost nabíjení - až na konci procesu!
+                # Nejprve ověříme, kolik energie ze solárů můžeme skutečně využít
+                solar_charging_kwh = solar_charging_wh / 1000
+                available_capacity = battery_capacity - current_level
                 efficiency_factor = charging_eff / 100
-                actual_charge_kwh = total_charging_kwh * efficiency_factor
+                
+                # První priorita - solární energie (s aplikací účinnosti)
+                usable_solar_kwh = min(solar_charging_kwh, available_capacity / efficiency_factor)
+                actual_solar_charge_kwh = usable_solar_kwh * efficiency_factor
+                
+                # Aktualizujeme dostupnou kapacitu po solárním nabíjení
+                remaining_capacity = battery_capacity - (current_level + actual_solar_charge_kwh)
+                
+                # Druhá priorita - nouzové nabíjení ze sítě
+                if emergency_grid_charging_kwh > 0:
+                    # Ověříme, kolik energie můžeme ještě dobít z nouzového nabíjení
+                    usable_emergency_kwh = min(emergency_grid_charging_kwh, remaining_capacity / efficiency_factor)
+                    actual_emergency_charge_kwh = usable_emergency_kwh * efficiency_factor
+                    # Aktualizujeme dostupnou kapacitu
+                    remaining_capacity -= actual_emergency_charge_kwh
+                else:
+                    usable_emergency_kwh = 0
+                    actual_emergency_charge_kwh = 0
+                
+                # Třetí priorita - plánované nabíjení ze sítě
+                if planned_grid_charging_minute_kwh > 0:
+                    # Ověříme, kolik energie můžeme ještě dobít z plánovaného nabíjení
+                    usable_planned_kwh = min(planned_grid_charging_minute_kwh, remaining_capacity / efficiency_factor)
+                    actual_planned_charge_kwh = usable_planned_kwh * efficiency_factor
+                else:
+                    usable_planned_kwh = 0
+                    actual_planned_charge_kwh = 0
+                
+                # Celkové dobití v této iteraci (už s aplikovanou účinností)
+                total_actual_charge_kwh = actual_solar_charge_kwh + actual_emergency_charge_kwh + actual_planned_charge_kwh
                 
                 # Nový stav baterie
-                new_level = current_level + actual_charge_kwh
+                new_level = current_level + total_actual_charge_kwh
                 
-                # Výpočet nákladů na nabíjení ze sítě
-                grid_charging_kwh = emergency_grid_charging_kwh + planned_grid_charging_minute_kwh
+                # Pro účely nákladů a logování potřebujeme celkovou energii ze sítě (před účinností)
+                grid_charging_kwh = usable_emergency_kwh + usable_planned_kwh
                 grid_charging_cost = grid_charging_kwh * price_kwh
                 
                 # Aktualizace databáze pouze pokud skutečně došlo k nabíjení
-                if total_charging_kwh > 0:
+                if total_actual_charge_kwh > 0:
                     # Aktualizace stavu baterie
                     cur.execute("""
                         UPDATE api_house 
@@ -276,7 +304,7 @@ def simulate_combined_charging():
                         WHERE id = %s
                     """, (new_level, house_id))
                     
-                    # Záznam do ChargingData
+                    # Záznam do ChargingData s aktualizovanými skutečnými hodnotami
                     cur.execute("""
                         INSERT INTO api_chargingdata (house_id, date, solar_charged_kwh, grid_charged_kwh, grid_charged_cost)
                         VALUES (%s, %s, %s, %s, %s)
@@ -288,21 +316,21 @@ def simulate_combined_charging():
                     """, (
                         house_id, 
                         current_date,
-                        (solar_charging_wh / 1000) * efficiency_factor,  # solar_charged_kwh s účinností
-                        grid_charging_kwh * efficiency_factor,           # grid_charged_kwh s účinností
-                        grid_charging_cost                               # grid_charged_cost
+                        actual_solar_charge_kwh,  # Skutečné dobití ze solárů
+                        actual_emergency_charge_kwh + actual_planned_charge_kwh,  # Skutečné dobití ze sítě
+                        grid_charging_cost  # Náklady (počítáno z energie před účinností)
                     ))
                     
                     logger.info(f"""
                         Dům {house_id} CELKOVÉ nabíjení:
                         - Datum a čas: {current_date} {current_hour:02d}:{current_minute:02d}
-                        - Ze solárů: {solar_charging_wh/1000:.4f} kWh (před účinností)
-                        - Ze sítě: {grid_charging_kwh:.4f} kWh (před účinností)
-                        - Celkem: {total_charging_kwh:.4f} kWh (před účinností)
-                        - Učinnost: {efficiency_factor*100:.0f}%
-                        - Skutečně nabito: {actual_charge_kwh:.4f} kWh
+                        - Ze solárů: {usable_solar_kwh:.4f} kWh (před účinností) -> {actual_solar_charge_kwh:.4f} kWh (po účinnosti)
+                        - Ze sítě (nouzové): {usable_emergency_kwh:.4f} kWh -> {actual_emergency_charge_kwh:.4f} kWh
+                        - Ze sítě (plánované): {usable_planned_kwh:.4f} kWh -> {actual_planned_charge_kwh:.4f} kWh
+                        - Celkem nabito: {total_actual_charge_kwh:.4f} kWh
                         - Cena nabíjení ze sítě: {grid_charging_cost:.2f} Kč
-                        - Stav baterie: {current_level:.2f} kWh -> {new_level:.2f} kWh
+                        - Stav baterie: {current_level:.2f} kWh -> {new_level:.2f} kWh ({new_level/battery_capacity*100:.1f}%)
+                        - Kapacita baterie: {battery_capacity:.2f} kWh
                     """)
                 else:
                     logger.info(f"Dům {house_id}: Žádné nabíjení neproběhlo v čase {current_time}")

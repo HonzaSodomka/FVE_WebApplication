@@ -216,6 +216,7 @@ def get_solar_prediction(house_power, charging_efficiency, current_hour, have_to
         # Vytvoříme pole s hodinovými výrobami
         hours_map = {}
         for timestamp, wh in rows:
+            print(f"{timestamp}")
             hour = timestamp.hour
             effective_hour = hour
             

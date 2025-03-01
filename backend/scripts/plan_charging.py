@@ -188,8 +188,6 @@ def get_solar_prediction(house_power, charging_efficiency, current_hour, have_to
         today = current_time.date()
         tomorrow = today + timedelta(days=1)
 
-        print(f"{have_tomorrow_prices}")
-
         # Upravíme dotaz podle dostupnosti dat o zítřejších cenách
         if have_tomorrow_prices:
             # Máme data na zítřek, načteme hodiny od aktuální až do konce zítřka
@@ -211,56 +209,39 @@ def get_solar_prediction(house_power, charging_efficiency, current_hour, have_to
         
         rows = cur.fetchall()
         
+        # Pro debugging vytiskni získaná data
+        print(f"Načteno {len(rows)} záznamů predikce solární výroby:")
+        for timestamp, wh in rows:
+            print(f"{timestamp}, {wh}")
+            
         # Přepočítací faktory
         power_ratio = house_power / 20  # Základní predikce je na 20kWp
         efficiency_factor = charging_efficiency / 100
         
-        # Vytvoříme pole s hodinovými výrobami
-        hours_map = {}
+        # Zjistíme, kolik hodin máme v plánovacím horizontu
+        n_hours = len(get_price_data(current_hour, have_tomorrow_prices))
+        
+        # Inicializujeme prázdné pole pro všechny hodiny - výchozí hodnota 0
+        solar_production = [0.0] * n_hours
+        
+        # Mapování záznamů na hodiny v plánovacím horizontu
         for timestamp, wh in rows:
-            print(f"{timestamp}, {wh}")
-            hour = timestamp.hour
-            effective_hour = hour
-            
-            # Pokud jsme mimo začátek hodiny, posuneme výrobu do další hodiny
-            if timestamp.minute != 0:
-                effective_hour = (hour + 1) % 24
-                
-                # Pro půlnoc změníme datum
-                if effective_hour == 0:
-                    date_key = (timestamp + timedelta(days=1)).date()
-                else:
-                    date_key = timestamp.date()
+            # Určení relativní hodiny v plánovacím horizontu
+            if timestamp.date() == today:
+                # Pro dnešní den, odečteme aktuální hodinu
+                hour_index = timestamp.hour - current_hour
             else:
-                date_key = timestamp.date()
+                # Pro zítřejší den, přičteme počet zbývajících hodin dneška
+                hour_index = (24 - current_hour) + timestamp.hour
                 
-            # Identifikátor pro datum a hodinu
-            date_hour_key = f"{date_key}_{effective_hour}"
-            
-            # Upravená výroba
-            adjusted_wh = wh * power_ratio * efficiency_factor / 1000  # Převod Wh na kWh
-            
-            # Uložíme do slovníku
-            if date_hour_key in hours_map:
-                hours_map[date_hour_key] = max(hours_map[date_hour_key], adjusted_wh)
-            else:
-                hours_map[date_hour_key] = adjusted_wh
+            # Kontrola, zda index je v platném rozsahu
+            if 0 <= hour_index < n_hours:
+                # Upravená výroba
+                adjusted_wh = wh * power_ratio * efficiency_factor / 1000  # Převod Wh na kWh
+                solar_production[hour_index] = adjusted_wh
         
-        # Seřadíme podle data a hodiny
-        solar_production = []
-        for date_key in sorted(set(k.split('_')[0] for k in hours_map.keys())):
-            for hour in range(24):
-                date_hour_key = f"{date_key}_{hour}"
-                if date_hour_key in hours_map:
-                    solar_production.append(hours_map[date_hour_key])
+        logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Vytvořena předpověď pro {n_hours} hodin")
         
-        logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Načteno {len(rows)} záznamů pro {house_power}kWp")
-        
-        if not rows:
-            logger.warning("NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Žádné záznamy nenalezeny")
-            # V případě absence dat, vracíme nulové pole o stejné délce jako je počet cen
-            return [0.0] * len(get_price_data(current_hour, have_tomorrow_prices))
-            
         return solar_production
         
     except Exception as e:

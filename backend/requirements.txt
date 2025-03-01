@@ -6,3 +6,4 @@ psycopg2-binary==2.9.9
 requests
 django-cors-headers
 django-ratelimit
+pulp==2.7.0

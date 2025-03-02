@@ -383,6 +383,24 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
         consumption = consumption[:n_hours]
         prices = prices[:n_hours]
 
+        # Výpis vstupních dat pro kontrolu
+        print("\nVSTUPNÍ DATA PRO OPTIMALIZACI:")
+        print(f"{'Hodina':<8} {'Solár (kWh)':<15} {'Spotřeba (kWh)':<20} {'Cena (Kč/kWh)':<15}")
+        print("-"*60)
+        
+        current_time = datetime.now()
+        current_hour = current_time.hour
+        for i in range(n_hours):
+            # Výpočet skutečné hodiny a data
+            if i < 24 - current_hour:
+                actual_hour = current_hour + i
+                day = "dnes"
+            else:
+                actual_hour = (current_hour + i) % 24
+                day = "zítra"
+                
+            print(f"{actual_hour:2d} ({day}) {solar_production[i]:<15.3f} {consumption[i]:<20.3f} {prices[i]:<15.3f}")
+
         # Parametry baterie
         battery_capacity = house_data['battery_capacity']
         min_battery_level_pct = house_data['min_battery_level']
@@ -459,15 +477,27 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
             amount = round(max(0, amount), 2)
             if amount < 0.01:  # Ignorujeme zanedbatelně malé nabíjení
                 amount = 0
+                
+            # Výpočet skutečného data a hodiny
+            if h < 24 - current_hour:
+                # Dnes
+                actual_hour = current_hour + h
+                actual_date = current_time.date()
+            else:
+                # Zítra
+                actual_hour = (current_hour + h) % 24
+                actual_date = current_time.date() + timedelta(days=1)
+                
             charging_plan.append({
-                'hour': h,
+                'hour': actual_hour,
+                'date': actual_date,
                 'planned_charging_kwh': amount
             })
         
         # Výpis výsledného plánu pro debugging
         logger.info(f"OPTIMALIZACE NABÍJENÍ LP: Dům {house_id}")
         total_charging = sum(plan['planned_charging_kwh'] for plan in charging_plan)
-        total_cost = sum(plan['planned_charging_kwh'] * prices[plan['hour']] for plan in charging_plan)
+        total_cost = sum(plan['planned_charging_kwh'] * prices[i] for i, plan in enumerate(charging_plan))
         logger.info(f"Celkem naplánováno: {total_charging:.2f} kWh za {total_cost:.2f} Kč")
         
         # Podrobné logování
@@ -483,14 +513,18 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
         print(f"- Účinnost nabíjení: {charging_efficiency*100}%")
         
         print(f"\nVÝSLEDNÝ PLÁN NABÍJENÍ:")
-        print(f"{'Hodina':<10} {'Cena (Kč/kWh)':<15} {'Nabíjení (kWh)':<15} {'Stav baterie (kWh)':<20}")
-        print(f"{'-'*60}")
+        print(f"{'Datum':<12} {'Hodina':<8} {'Cena (Kč/kWh)':<15} {'Nabíjení (kWh)':<15} {'Stav baterie (kWh)':<20}")
+        print(f"{'-'*70}")
         
-        for h in range(n_hours):
-            level = pulp.value(battery_level[h])
-            amount = charging_plan[h]['planned_charging_kwh']
-            price = prices[h]
-            print(f"{h:<10} {price:<15.2f} {amount:<15.2f} {level:<20.2f}")
+        for i, plan in enumerate(charging_plan):
+            actual_date = plan['date']
+            actual_hour = plan['hour']
+            level = pulp.value(battery_level[i])
+            amount = plan['planned_charging_kwh']
+            price = prices[i]
+            
+            date_str = actual_date.strftime("%Y-%m-%d")
+            print(f"{date_str} {actual_hour:<8} {price:<15.2f} {amount:<15.2f} {level:<20.2f}")
         
         print(f"\nCELKOVÉ NÁKLADY: {total_cost:.2f} Kč")
         print(f"CELKEM DOBITO: {total_charging:.2f} kWh")
@@ -522,6 +556,10 @@ def fallback_charging_plan(house_id, house_data, solar_production, consumption, 
     charging_efficiency = house_data['charging_efficiency'] / 100
     max_charging_power = house_data['max_charging_power']
     
+    # Aktuální čas pro výpočet skutečných hodin a dat
+    current_time = datetime.now()
+    current_hour = current_time.hour
+    
     # Simulace stavu baterie bez nabíjení
     simulated_levels = [current_level]
     for h in range(1, n_hours):
@@ -537,7 +575,23 @@ def fallback_charging_plan(house_id, house_data, solar_production, consumption, 
             critical_hours.append(h)
     
     # Inicializace plánu nabíjení
-    charging_plan = [{'hour': h, 'planned_charging_kwh': 0} for h in range(n_hours)]
+    charging_plan = []
+    for h in range(n_hours):
+        # Výpočet skutečného data a hodiny
+        if h < 24 - current_hour:
+            # Dnes
+            actual_hour = current_hour + h
+            actual_date = current_time.date()
+        else:
+            # Zítra
+            actual_hour = (current_hour + h) % 24
+            actual_date = current_time.date() + timedelta(days=1)
+            
+        charging_plan.append({
+            'hour': actual_hour,
+            'date': actual_date,
+            'planned_charging_kwh': 0
+        })
     
     # Pokud nejsou kritické hodiny, není potřeba nabíjet
     if not critical_hours:
@@ -609,22 +663,14 @@ def save_charging_schedule(house_id, charging_plan):
         # Uložíme nové plány
         saved_count = 0
         current_time = datetime.now()
-        today = current_time.date()
-        tomorrow = today + timedelta(days=1)
         
         for plan_item in charging_plan:
             hour = plan_item['hour']
             amount = plan_item['planned_charging_kwh']
+            date = plan_item['date']
             
             if amount <= 0:
                 continue
-                
-            # Určení data podle hodiny
-            if hour < 24:
-                plan_date = today
-            else:
-                plan_date = tomorrow
-                hour = hour % 24
             
             cur.execute("""
                 INSERT INTO api_chargingschedule
@@ -632,7 +678,7 @@ def save_charging_schedule(house_id, charging_plan):
                 VALUES (%s, %s, %s, %s)
             """, [
                 house_id,
-                plan_date,
+                date,
                 hour,
                 amount
             ])
@@ -666,13 +712,14 @@ def plan_charging_for_house(house_id):
         
         # 1. Zjistíme aktuální čas a posuneme plánování od následující hodiny
         current_time = datetime.now()
-        # Posun na další hodinu
+        # Posun na další hodinu - skripty se spouští v xx:59, takže plánujeme od další hodiny
         next_hour = current_time.hour + 1
         current_date = current_time.date()
         tomorrow = current_date + timedelta(days=1)
         
         # Určíme, zda máme k dispozici data o cenách elektřiny na zítřek
-        have_tomorrow_prices = current_time.hour >= 17  # Po 17. hodině máme ceny na zítřek
+        # Pokud je aktuální hodina >= 17, máme data na zítřek
+        have_tomorrow_prices = current_time.hour >= 17
         
         if have_tomorrow_prices:
             print(f"Aktuální čas: {current_time.strftime('%H:%M')} - Máme k dispozici ceny na zítřek")
@@ -718,7 +765,14 @@ def plan_charging_for_house(house_id):
         sorted_prices = [(h, p) for h, p in enumerate(prices)]
         sorted_prices.sort(key=lambda x: x[1])
         for h, price in sorted_prices[:10]:
-            print(f"Hodina {h}: {price:.3f} Kč/kWh")
+            # Překlad do skutečné hodiny
+            if h < 24 - next_hour:
+                actual_hour = next_hour + h
+                day = "dnes"
+            else:
+                actual_hour = (next_hour + h) % 24
+                day = "zítra"
+            print(f"Hodina {actual_hour} ({day}): {price:.3f} Kč/kWh")
         
         # 4. Získání predikce solární výroby
         print("\nKROK 3: ZÍSKÁNÍ PREDIKCE SOLÁRNÍ VÝROBY")
@@ -740,6 +794,26 @@ def plan_charging_for_house(house_id):
         )
         
         print(f"Úspěšně načtena predikce spotřeby pro {len(consumption)} hodin")
+        
+        # Výpis podrobných informací o predikci vedle sebe
+        print("\nPODROBNÁ PREDIKCE PRO KAŽDOU HODINU:")
+        print(f"{'Hodina':<10} {'Den':<10} {'Solární výroba (kWh)':<25} {'Spotřeba (kWh)':<20} {'Cena (Kč/kWh)':<15}")
+        print("-" * 85)
+        
+        for i in range(min(len(solar_production), len(consumption), len(prices))):
+            # Výpočet skutečné hodiny a data
+            if i < 24 - next_hour:
+                actual_hour = next_hour + i
+                day = "dnes"
+            else:
+                actual_hour = (next_hour + i) % 24
+                day = "zítra"
+                
+            solar = solar_production[i]
+            cons = consumption[i]
+            price = prices[i]
+            
+            print(f"{actual_hour:<10} {day:<10} {solar:<25.3f} {cons:<20.3f} {price:<15.3f}")
         
         # 6. Optimalizace plánu nabíjení pomocí lineárního programování
         print("\nKROK 5: OPTIMALIZACE PLÁNU NABÍJENÍ")

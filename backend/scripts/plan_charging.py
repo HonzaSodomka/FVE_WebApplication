@@ -426,16 +426,60 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
         charging_efficiency = house_data['charging_efficiency'] / 100
         max_charging_power = house_data['max_charging_power']
         
-        # Stanovení efektivního minima podle risk_level - jako fixní procenta kapacity
-        risk_levels = {
-            'LOW': 50,     # Konzervativní přístup - 50% kapacity
-            'MEDIUM': 25,  # Vyvážený přístup - 25% kapacity
-            'HIGH': 10     # Agresivní přístup - 10% kapacity
-        }
+        # Identifikace cenových kategorií
+        avg_price = sum(prices) / len(prices)
+        low_price_threshold = avg_price * 0.7  # 70% průměrné ceny považujeme za nízkou cenu
+        very_low_price_threshold = avg_price * 0.4  # 40% průměrné ceny považujeme za velmi nízkou cenu
         
-        # Efektivní minimální úroveň (přímé procento z kapacity)
-        effective_min_percent = risk_levels.get(house_data['risk_level'], 25)
-        effective_min_level = battery_capacity * (effective_min_percent / 100)
+        # Identifikace hodin s nízkými cenami
+        low_price_hours = [i for i, p in enumerate(prices) if p <= low_price_threshold]
+        very_low_price_hours = [i for i, p in enumerate(prices) if p <= very_low_price_threshold]
+        
+        # Výpis cenových kategorií
+        print(f"\nCENOVÉ KATEGORIE:")
+        print(f"- Průměrná cena: {avg_price:.3f} Kč/kWh")
+        print(f"- Nízká cena (≤ {low_price_threshold:.3f} Kč/kWh): {len(low_price_hours)} hodin")
+        print(f"- Velmi nízká cena (≤ {very_low_price_threshold:.3f} Kč/kWh): {len(very_low_price_hours)} hodin")
+        
+        # Stanovení efektivního minima podle risk_level
+        risk_level_settings = {
+            'LOW': {
+                'standard_min': 50,
+                'flexible_min': 30,
+                'target_reserve': 70
+            },
+            'MEDIUM': {
+                'standard_min': 25,
+                'flexible_min': 15,
+                'target_reserve': 35
+            },
+            'HIGH': {
+                'standard_min': 10,
+                'flexible_min': 5,
+                'target_reserve': 20
+            }
+        }
+
+        # Získání nastavení pro aktuální risk_level
+        current_settings = risk_level_settings.get(
+            house_data['risk_level'], 
+            risk_level_settings['MEDIUM']  # MEDIUM jako výchozí, pokud risk_level není platný
+        )
+
+        # Výpočet konkrétních hodnot
+        standard_min_percent = current_settings['standard_min']
+        standard_min_level = battery_capacity * (standard_min_percent / 100)
+
+        flexible_min_percent = current_settings['flexible_min']
+        flexible_min_level = battery_capacity * (flexible_min_percent / 100)
+
+        target_reserve_percent = current_settings['target_reserve']
+        target_reserve_level = battery_capacity * (target_reserve_percent / 100)
+        
+        print(f"\nDYNAMICKÉ ÚROVNĚ BATERIE ({house_data['risk_level']} RISK):")
+        print(f"- Standardní minimum: {standard_min_level:.2f} kWh ({standard_min_percent}%)")
+        print(f"- Flexibilní minimum: {flexible_min_level:.2f} kWh ({flexible_min_percent}%)")
+        print(f"- Cílová rezerva: {target_reserve_level:.2f} kWh ({target_reserve_percent}%)")
         
         # Vytvoření LP problému
         prob = pulp.LpProblem(f"BatteryCharging_{house_id}", pulp.LpMinimize)
@@ -446,17 +490,34 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
         # Proměnné: stav baterie na konci každé hodiny
         battery_level = [pulp.LpVariable(f"level_{h}", min_battery_level, battery_capacity) for h in range(n_hours)]
         
-        # Slabá omezení pro efektivní minimum
-        min_violations = [pulp.LpVariable(f"min_viol_{h}", 0, None) for h in range(n_hours)]
+        # Proměnné pro dynamické minimum baterie
+        # Slabá omezení pro standardní minimum
+        std_min_violations = [pulp.LpVariable(f"std_min_viol_{h}", 0, None) for h in range(n_hours)]
         
-        # Cílová funkce: minimalizace nákladů + penalizace za porušení efektivního minima
-        high_penalty = max(prices) * 10  # Vysoká penalizace za porušení efektivního minima
+        # Slabá omezení pro flexibilní minimum
+        flex_min_violations = [pulp.LpVariable(f"flex_min_viol_{h}", 0, None) for h in range(n_hours)]
+        
+        # Slabá omezení pro cílovou rezervu v levných hodinách
+        reserve_violations = [pulp.LpVariable(f"reserve_viol_{h}", 0, None) for h in range(n_hours)]
+        
+        # Cílová funkce: komplexní optimalizace
+        # 1. Minimalizace nákladů na nabíjení
+        cost_component = pulp.lpSum([charging[h] * prices[h] for h in range(n_hours)])
+        
+        # 2. Penalizace za porušení standardního minima (vysoká)
+        std_min_penalty = max(prices) * 15  # Vysoká penalizace
+        std_min_component = pulp.lpSum([std_min_violations[h] * std_min_penalty for h in range(n_hours)])
+        
+        # 3. Penalizace za porušení flexibilního minima (velmi vysoká)
+        flex_min_penalty = max(prices) * 30  # Velmi vysoká penalizace
+        flex_min_component = pulp.lpSum([flex_min_violations[h] * flex_min_penalty for h in range(n_hours)])
+        
+        # 4. Slabá preference pro nabíjení v levných hodinách na cílovou rezervu
+        reserve_penalty = min(prices) * 0.5  # Slabá penalizace
+        reserve_component = pulp.lpSum([reserve_violations[h] * reserve_penalty for h in very_low_price_hours])
         
         # Kombinovaná cílová funkce
-        prob += (
-            pulp.lpSum([charging[h] * prices[h] for h in range(n_hours)]) + 
-            pulp.lpSum([min_violations[h] * high_penalty for h in range(n_hours)])
-        )
+        prob += cost_component + std_min_component + flex_min_component + reserve_component
         
         # Počáteční stav baterie
         balance = (solar_production[0] if 0 < len(solar_production) else 0) - \
@@ -469,13 +530,36 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
             balance = solar_production[h] - consumption[h] + charging[h] * charging_efficiency
             prob += battery_level[h] == battery_level[h-1] + balance
         
-        # Omezení pro efektivní minimum (slabé omezení s penalizací)
+        # Dynamické omezení pro každou hodinu
         for h in range(n_hours):
-            prob += battery_level[h] + min_violations[h] >= effective_min_level
-        
-        # Tvrdé omezení pro absolutní minimum
-        for h in range(n_hours):
+            # 1. Napřed zjistíme, zda máme v blízké budoucnosti (do 3 hodin) levnější elektřinu
+            has_cheaper_future = False
+            if h < n_hours - 3:
+                future_prices = prices[h+1:h+4]  # Následující 3 hodiny
+                if min(future_prices) < prices[h] * 0.85:  # Alespoň o 15% levnější
+                    has_cheaper_future = True
+            
+            # 2. Určíme vhodné minimum pro tuto hodinu
+            if has_cheaper_future:
+                # Pokud v blízké budoucnosti bude elektřina levnější, můžeme tolerovat nižší úroveň
+                effective_min = flexible_min_level
+                print(f"Hodina {next_hour + h}: Očekávám levnější elektřinu v budoucnu, použiji flexibilní minimum {flexible_min_percent}%")
+            else:
+                # Jinak použijeme standardní minimum
+                effective_min = standard_min_level
+            
+            # 3. Základní tvrdé omezení - nikdy neklesáme pod absolutní minimum
             prob += battery_level[h] >= min_battery_level
+            
+            # 4. Omezení pro flexibilní minimum
+            prob += battery_level[h] + flex_min_violations[h] >= flexible_min_level
+            
+            # 5. Omezení pro standardní minimum
+            prob += battery_level[h] + std_min_violations[h] >= effective_min
+            
+            # 6. Pro velmi levné hodiny přidáme slabou preferenci nabíjení na cílovou rezervu
+            if h in very_low_price_hours:
+                prob += battery_level[h] + reserve_violations[h] >= target_reserve_level
         
         # Vyřešení problému
         prob.solve(pulp.PULP_CBC_CMD(msg=False))
@@ -523,14 +607,16 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
         print(f"\nPARAMETRY BATERIE:")
         print(f"- Kapacita: {battery_capacity} kWh")
         print(f"- Aktuální stav: {current_level} kWh")
-        print(f"- Minimální úroveň: {min_battery_level} kWh ({min_battery_level_pct}%)")
-        print(f"- Efektivní minimální úroveň: {effective_min_level} kWh ({effective_min_percent}% kapacity)")
+        print(f"- Absolutní minimum: {min_battery_level} kWh ({min_battery_level_pct}%)")
+        print(f"- Standardní minimum: {standard_min_level:.2f} kWh ({standard_min_percent}%)")
+        print(f"- Flexibilní minimum: {flexible_min_level:.2f} kWh ({flexible_min_percent}%)")
+        print(f"- Cílová rezerva: {target_reserve_level:.2f} kWh ({target_reserve_percent}%)")
         print(f"- Max nabíjecí výkon: {max_charging_power} kW")
         print(f"- Účinnost nabíjení: {charging_efficiency*100}%")
         
         print(f"\nVÝSLEDNÝ PLÁN NABÍJENÍ:")
-        print(f"{'Datum':<12} {'Hodina':<8} {'Cena (Kč/kWh)':<15} {'Nabíjení (kWh)':<15} {'Stav baterie (kWh)':<20}")
-        print(f"{'-'*70}")
+        print(f"{'Datum':<12} {'Hodina':<8} {'Cena (Kč/kWh)':<15} {'Nabíjení (kWh)':<15} {'Stav baterie (kWh)':<20} {'% kapacity':<12}")
+        print(f"{'-'*90}")
         
         for i, plan in enumerate(charging_plan):
             actual_date = plan['date']
@@ -538,9 +624,18 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
             level = pulp.value(battery_level[i])
             amount = plan['planned_charging_kwh']
             price = prices[i]
+            battery_pct = (level / battery_capacity) * 100
+            
+            min_type = ""
+            if i in very_low_price_hours:
+                min_type = f"(cíl: {target_reserve_percent}%)"
+            elif has_cheaper_future:
+                min_type = f"(flex: {flexible_min_percent}%)"
+            else:
+                min_type = f"(std: {standard_min_percent}%)"
             
             date_str = actual_date.strftime("%Y-%m-%d")
-            print(f"{date_str} {actual_hour:<8} {price:<15.2f} {amount:<15.2f} {level:<20.2f}")
+            print(f"{date_str} {actual_hour:<8} {price:<15.2f} {amount:<15.2f} {level:<20.2f} {battery_pct:>5.1f}% {min_type}")
         
         print(f"\nCELKOVÉ NÁKLADY: {total_cost:.2f} Kč")
         print(f"CELKEM DOBITO: {total_charging:.2f} kWh")

@@ -188,24 +188,13 @@ def get_solar_prediction(house_power, charging_efficiency, current_hour, have_to
         today = current_time.date()
         tomorrow = today + timedelta(days=1)
 
-        # Upravíme dotaz podle dostupnosti dat o zítřejších cenách
-        if have_tomorrow_prices:
-            # Máme data na zítřek, načteme hodiny od aktuální až do konce zítřka
-            cur.execute("""
-                SELECT timestamp, watt_hours_period
-                FROM api_solardata 
-                WHERE (DATE(timestamp) = %s AND EXTRACT(HOUR FROM timestamp) >= %s) 
-                   OR DATE(timestamp) = %s
-                ORDER BY timestamp
-            """, [today, current_hour, tomorrow])
-        else:
-            # Nemáme data na zítřek, načteme jen hodiny od aktuální do konce dneška
-            cur.execute("""
-                SELECT timestamp, watt_hours_period
-                FROM api_solardata 
-                WHERE DATE(timestamp) = %s AND EXTRACT(HOUR FROM timestamp) >= %s
-                ORDER BY timestamp
-            """, [today, current_hour])
+        # Načteme všechna data solární produkce pro dnešek
+        cur.execute("""
+            SELECT timestamp, watt_hours_period
+            FROM api_solardata 
+            WHERE DATE(timestamp) = %s
+            ORDER BY timestamp
+        """, [today])
         
         rows = cur.fetchall()
         
@@ -214,31 +203,55 @@ def get_solar_prediction(house_power, charging_efficiency, current_hour, have_to
         for timestamp, wh in rows:
             print(f"{timestamp}, {wh}")
             
+        # Najdeme první nenulovou celou hodinu
+        first_nonzero_hour = None
+        for timestamp, wh in rows:
+            if wh > 0 and timestamp.minute == 0:
+                first_nonzero_hour = timestamp.hour
+                break
+        
+        if first_nonzero_hour is None:
+            logger.warning("Nenalezena žádná nenulová celá hodina v solární predikci")
+            first_nonzero_hour = 7  # Výchozí hodnota, pokud nenajdeme nenulovou hodinu
+        
         # Přepočítací faktory
         power_ratio = house_power / 20  # Základní predikce je na 20kWp
         efficiency_factor = charging_efficiency / 100
         
         # Zjistíme, kolik hodin máme v plánovacím horizontu
-        n_hours = len(get_price_data(current_hour, have_tomorrow_prices))
+        if have_tomorrow_prices:
+            # Máme data na zítřek, plánujeme od current_hour do 23 hodin následujícího dne
+            n_hours = (24 - current_hour) + 24
+        else:
+            # Nemáme data na zítřek, plánujeme od current_hour do 23 hodin dnes
+            n_hours = 24 - current_hour
         
         # Inicializujeme prázdné pole pro všechny hodiny - výchozí hodnota 0
         solar_production = [0.0] * n_hours
         
-        # Mapování záznamů na hodiny v plánovacím horizontu
+        # Vytvoříme slovník s produkcí dle hodin
+        hour_production = {}
+        
         for timestamp, wh in rows:
-            # Určení relativní hodiny v plánovacím horizontu
-            if timestamp.date() == today:
-                # Pro dnešní den, odečteme aktuální hodinu
-                hour_index = timestamp.hour - current_hour
+            hour = timestamp.hour
+            
+            # Poslední záznam, který není v celé hodině, přiřadíme k další hodině
+            if timestamp.minute > 0 and hour < 23:
+                next_hour = hour + 1
+                if next_hour not in hour_production:
+                    hour_production[next_hour] = wh
             else:
-                # Pro zítřejší den, přičteme počet zbývajících hodin dneška
-                hour_index = (24 - current_hour) + timestamp.hour
-                
-            # Kontrola, zda index je v platném rozsahu
-            if 0 <= hour_index < n_hours:
-                # Upravená výroba
-                adjusted_wh = wh * power_ratio * efficiency_factor / 1000  # Převod Wh na kWh
-                solar_production[hour_index] = adjusted_wh
+                if hour not in hour_production:
+                    hour_production[hour] = wh
+        
+        # Mapování hodin na indexy v plánovacím horizontu
+        for hour, wh in hour_production.items():
+            if hour >= current_hour:  # Bereme jen hodiny od current_hour dál
+                idx = hour - current_hour
+                if idx < n_hours:
+                    # Upravená výroba s přepočtem na instalovaný výkon a účinnost
+                    adjusted_wh = wh * power_ratio * efficiency_factor / 1000  # Převod Wh na kWh
+                    solar_production[idx] = adjusted_wh
         
         logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Vytvořena předpověď pro {n_hours} hodin")
         
@@ -246,8 +259,12 @@ def get_solar_prediction(house_power, charging_efficiency, current_hour, have_to
         
     except Exception as e:
         logger.error(f"CHYBA PŘI NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: {str(e)}")
-        # V případě chyby, vracíme nulové pole o stejné délce jako je počet cen
-        return [0.0] * len(get_price_data(current_hour, have_tomorrow_prices))
+        # V případě chyby, vracíme nulové pole o příslušné délce
+        if have_tomorrow_prices:
+            n_hours = (24 - current_hour) + 24
+        else:
+            n_hours = 24 - current_hour
+        return [0.0] * n_hours
         
     finally:
         if 'cur' in locals():

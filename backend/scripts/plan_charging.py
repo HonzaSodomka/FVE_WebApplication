@@ -297,6 +297,43 @@ def get_consumption_prediction(house_id, current_hour, have_tomorrow_prices=Fals
         today = current_time.date()
         tomorrow = today + timedelta(days=1)
         
+        # Nový dotaz pro výpis spotřeb v 18:00 o víkendech za posledních 30 dnů
+        cur.execute("""
+            WITH consumption_items AS (
+                SELECT 
+                    date,
+                    time,
+                    (items->>'consumption_w')::float as consumption_w
+                FROM api_consumptiondata,
+                LATERAL jsonb_array_elements(appliance_consumption) items
+                WHERE house_id = %s 
+                    AND date >= %s
+            ),
+            hourly_consumption AS (
+                SELECT 
+                    date,
+                    EXTRACT(HOUR FROM time::time) as hour,
+                    EXTRACT(DOW FROM date) as day_of_week,
+                    SUM(consumption_w) as total_wh
+                FROM consumption_items
+                GROUP BY date, EXTRACT(HOUR FROM time::time)
+                ORDER BY date, hour
+            )
+            SELECT 
+                date,
+                total_wh / 1000.0 as total_kwh
+            FROM hourly_consumption
+            WHERE hour = 18 AND day_of_week IN (0, 6)
+            ORDER BY date
+        """, [house_id, today - timedelta(days=30)])
+        
+        weekend_rows = cur.fetchall()
+        
+        # Výpis do konzole
+        print("\n--- SPOTŘEBY V 18:00 O VÍKENDECH ZA POSLEDNÍCH 30 DNŮ ---")
+        for row in weekend_rows:
+            print(f"{row[0]}\t{row[1]:.3f} kWh")
+        
         # Zjistíme typ dnů (víkend/všední)
         is_today_weekend = today.weekday() >= 5
         is_tomorrow_weekend = tomorrow.weekday() >= 5

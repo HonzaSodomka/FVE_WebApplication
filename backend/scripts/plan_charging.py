@@ -406,17 +406,17 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
         print("-"*60)
         
         current_time = datetime.now()
-        current_hour = current_time.hour
+        next_hour = current_time.hour + 1
         for i in range(n_hours):
             # Výpočet skutečné hodiny a data
-            if i < 24 - current_hour:
-                actual_hour = current_hour + i
+            actual_hour = next_hour + i
+            if actual_hour < 24:
                 day = "dnes"
             else:
-                actual_hour = (current_hour + i) % 24
+                actual_hour = actual_hour % 24
                 day = "zítra"
                 
-            print(f"{actual_hour:2d} ({day}) {solar_production[i]:<15.3f} {consumption[i]:<20.3f} {prices[i]:<15.3f}")
+            print(f"{actual_hour:<2} ({day}) {solar_production[i]:<15.3f} {consumption[i]:<20.3f} {prices[i]:<15.3f}")
 
         # Parametry baterie
         battery_capacity = house_data['battery_capacity']
@@ -459,7 +459,6 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
         )
         
         # Počáteční stav baterie
-        # balance = solar_production[0] - consumption[0] + charging[0] * charging_efficiency
         balance = (solar_production[0] if 0 < len(solar_production) else 0) - \
                  (consumption[0] if 0 < len(consumption) else 0) + \
                  charging[0] * charging_efficiency
@@ -496,13 +495,13 @@ def optimize_charging_lp(house_id, house_data, solar_production, consumption, pr
                 amount = 0
                 
             # Výpočet skutečného data a hodiny
-            if h < 24 - current_hour:
+            actual_hour = next_hour + h
+            if actual_hour < 24:
                 # Dnes
-                actual_hour = current_hour + h
                 actual_date = current_time.date()
             else:
                 # Zítra
-                actual_hour = (current_hour + h) % 24
+                actual_hour = actual_hour % 24
                 actual_date = current_time.date() + timedelta(days=1)
                 
             charging_plan.append({

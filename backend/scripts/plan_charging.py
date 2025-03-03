@@ -520,7 +520,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
     Optimalizace nabíjení podle cenově-efektivního přístupu.
     
     Pro každou hodinu od nejlevnější:
-    1. Definujeme její cílovou úroveň (target) pro konec dne
+    1. Definujeme její cílovou úroveň (target) pro konec dne s 10% rezervou
     2. Plánujeme nabíjení tak, aby baterie na konci dne dosáhla tohoto cíle
     3. Zohledňujeme kapacitu baterie, maximální výkon a solární výrobu
     
@@ -601,20 +601,30 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                     'index': i
                 })
         
-        # Kategorizace cen pro každou hodinu
+        # Kategorizace cen pro každou hodinu a výpočet cílů s rezervou
         for hour in price_data:
             price_category = categorize_price(hour['price'], price_categories)
             hour['price_category'] = price_category
             
-            # Nastavení cílové úrovně baterie podle kategorie a rizikového profilu
-            target_percentage = target_profile[price_category]
-            hour['target_level'] = battery_capacity * target_percentage
-            hour['target_percentage'] = target_percentage * 100  # Pro logování
+            # Nastavení základní cílové úrovně baterie podle kategorie a rizikového profilu
+            base_target_percentage = target_profile[price_category]
+            hour['base_target_level'] = battery_capacity * base_target_percentage
+            hour['base_target_percentage'] = base_target_percentage * 100  # Pro logování
+            
+            # Přidáme 10% rezervu k cílové hodnotě (10% z hodnoty, ne absolutních)
+            # Například místo 60% nabijeme na 66% (60% + 10% z 60% = 66%)
+            target_with_reserve_percentage = base_target_percentage * 1.1
+            
+            # Uložíme cíl s rezervou
+            hour['target_level'] = battery_capacity * target_with_reserve_percentage
+            hour['target_percentage'] = target_with_reserve_percentage * 100  # Pro logování
         
         # Výpis kategorií cen pro tento plán
         logger.info(f"Rizikový profil: {risk_level}")
         for category, percentage in target_profile.items():
-            logger.info(f"  - Kategorie '{category}': cílová úroveň baterie {percentage*100:.1f}% ({percentage*battery_capacity:.2f} kWh)")
+            base_target = percentage * 100
+            target_with_reserve = percentage * 110
+            logger.info(f"  - Kategorie '{category}': základní cíl {base_target:.1f}%, cíl s rezervou {target_with_reserve:.1f}% ({target_with_reserve*battery_capacity/100:.2f} kWh)")
         
         # Seřadíme hodiny podle ceny (od nejlevnější po nejdražší)
         sorted_price_indices = sorted(range(n_hours), key=lambda i: price_data[i]['price'])
@@ -642,7 +652,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 net_flow = effective_solar - consumption + effective_grid_charging
                 
                 # Nový stav baterie
-                current_level = max(0, current_level + net_flow)
+                current_level = max(0, min(battery_capacity, current_level + net_flow))
                 
                 levels.append({
                     'hour': price_data[i]['hour'],
@@ -656,6 +666,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                     'effective_grid_charging': effective_grid_charging,
                     'price': price_data[i]['price'],
                     'price_category': price_data[i]['price_category'],
+                    'base_target_level': price_data[i]['base_target_level'],
                     'target_level': price_data[i]['target_level'],
                     'index': i
                 })
@@ -676,16 +687,19 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         # Pro každou hodinu v pořadí od nejlevnější
         for hour_idx in sorted_price_indices:
             current_hour = price_data[hour_idx]
-            hour_target = current_hour['target_level']
+            # Kontrolujeme vůči základnímu cíli (bez rezervy), ale plánujeme nabíjet na cíl s rezervou
+            base_target = current_hour['base_target_level']
+            hour_target = current_hour['target_level']  # Cíl s 10% rezervou
             
-            logger.info(f"Zpracovávám hodinu {current_hour['hour']}:00 s cenou {current_hour['price']:.2f} Kč/kWh (kategorie: {current_hour['price_category']}, target: {current_hour['target_percentage']:.1f}%)")
+            logger.info(f"Zpracovávám hodinu {current_hour['hour']}:00 s cenou {current_hour['price']:.2f} Kč/kWh (kategorie: {current_hour['price_category']}, základní cíl: {current_hour['base_target_percentage']:.1f}%, cíl s rezervou: {current_hour['target_percentage']:.1f}%)")
             
             # 1. Zjistíme, jaký bude stav baterie na konci období s aktuálním plánem
             current_levels = simulate_battery_levels(charging_plan)
             end_level = current_levels[-1]['level']
             
             # 2. Plánování nabíjení pro aktuální hodinu
-            if end_level < hour_target:
+            # Kontrolujeme vůči základnímu cíli (bez rezervy)
+            if end_level < base_target:
                 # Získáme informace o solární výrobě v této hodině
                 solar_hour = next((s for s in solar_data if s['hour'] == current_hour['hour'] and s['date'] == current_hour['date']), None)
                 solar_production = solar_hour['solar_kwh'] if solar_hour else 0
@@ -704,7 +718,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 
                 # Kontrolujeme:
                 # 1. Přesah 100% kapacity (v jakékoliv budoucí hodině)
-                # 2. Přesah cíle na konci plánovacího období
+                # 2. Přesah cíle S REZERVOU na konci plánovacího období
                 
                 # Hledáme nejvyšší přesah kapacity baterie
                 max_level = 0
@@ -720,13 +734,13 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                     capacity_excess = max_level - battery_capacity
                     logger.info(f"V hodině {max_level_hour}:00 by baterie překročila kapacitu o {capacity_excess:.2f} kWh")
                 
-                # Zjišťujeme přesah cíle na konci období
+                # Zjišťujeme přesah cíle S REZERVOU na konci období
                 end_test_level = test_levels[-1]['level']
                 target_excess = 0
                 
                 if end_test_level > hour_target:
                     target_excess = end_test_level - hour_target
-                    logger.info(f"Konečný stav baterie by překročil cíl {hour_target:.2f} kWh o {target_excess:.2f} kWh")
+                    logger.info(f"Konečný stav baterie by překročil cíl s rezervou {hour_target:.2f} kWh o {target_excess:.2f} kWh")
                 
                 # Vypočítáme, kolik energie musíme odebrat (větší z obou přesahů)
                 energy_excess = max(capacity_excess, target_excess)
@@ -747,7 +761,9 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 current_levels = simulate_battery_levels(charging_plan)
                 end_level = current_levels[-1]['level']
                 
-                target_reached = end_level >= hour_target
+                # Kontrolujeme vůči základnímu cíli (bez rezervy)
+                target_reached = end_level >= base_target
+                reserve_target_reached = end_level >= hour_target
                 
                 logger.info(f"Finální plán pro hodinu {current_hour['hour']}:00:")
                 logger.info(f" - Naplánované nabíjení ze sítě: {planned_charging:.2f} kWh")
@@ -756,10 +772,11 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 logger.info(f" - Max. nabíjecí výkon baterie: {max_charging_power:.2f} kW")
                 logger.info(f" - Dostupný výkon pro nabíjení ze sítě: {available_charging_power:.2f} kW")
                 logger.info(f" - Konečný stav baterie: {end_level:.2f} kWh ({end_level/battery_capacity*100:.1f}%)")
-                logger.info(f" - Cíl splněn: {'ANO' if target_reached else 'NE'}")
+                logger.info(f" - Základní cíl splněn: {'ANO' if target_reached else 'NE'}")
+                logger.info(f" - Cíl s rezervou splněn: {'ANO' if reserve_target_reached else 'NE'}")
             
             else:
-                logger.info(f"Konečný stav baterie {end_level:.2f} kWh již splňuje cíl {hour_target:.2f} kWh, není potřeba nabíjet")
+                logger.info(f"Konečný stav baterie {end_level:.2f} kWh již splňuje základní cíl {base_target:.2f} kWh, není potřeba nabíjet")
         
         # Finální stav baterie po všech úpravách
         final_levels = simulate_battery_levels(charging_plan)
@@ -776,6 +793,8 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 'battery_percent': level['level'] / battery_capacity * 100,
                 'price': level['price'],
                 'price_category': level['price_category'],
+                'base_target_level': level['base_target_level'],
+                'base_target_percent': level['base_target_level'] / battery_capacity * 100,
                 'target_level': level['target_level'],
                 'target_percent': level['target_level'] / battery_capacity * 100,
                 'solar_production': level['solar'],
@@ -802,12 +821,12 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             logger.info(f"Konečný stav baterie: {last_plan['battery_level']:.2f} kWh ({last_plan['battery_percent']:.1f}%)")
         
         # Výpis finálního plánu v přehledné tabulce
-        logger.info("=" * 140)
+        logger.info("=" * 150)
         logger.info(f"PLÁN NABÍJENÍ PRO DŮM {house_id}")
-        logger.info("=" * 140)
-        logger.info(f"| {'Datum':<10} | {'Hodina':<8} | {'Cena':>10} | {'Spotřeba':>10} | {'Solár':>7} | {'Nabíjení':>10} | {'Stav baterie':>15} | {'Stav baterie':>15} | {'Kategorie':<15} | {'Cíl':>10} |")
-        logger.info(f"| {'':<10} | {'':<8} | {'(Kč/kWh)':>10} | {'(kWh)':>10} | {'(kWh)':>7} | {'(kWh)':>10} | {'(kWh)':>15} | {'(%)':>15} | {'ceny':<15} | {'(%)':>10} |")
-        logger.info(f"|:{'-'*10}|:{'-'*8}|{'-'*10}:|{'-'*10}:|{'-'*7}:|{'-'*10}:|{'-'*15}:|{'-'*15}:|:{'-'*15}|{'-'*10}:|")
+        logger.info("=" * 150)
+        logger.info(f"| {'Datum':<10} | {'Hodina':<8} | {'Cena':>10} | {'Spotřeba':>10} | {'Solár':>7} | {'Nabíjení':>10} | {'Stav baterie':>15} | {'Stav baterie':>15} | {'Kategorie':<15} | {'Zákl. cíl':>10} | {'Cíl s rez.':>10} |")
+        logger.info(f"| {'':<10} | {'':<8} | {'(Kč/kWh)':>10} | {'(kWh)':>10} | {'(kWh)':>7} | {'(kWh)':>10} | {'(kWh)':>15} | {'(%)':>15} | {'ceny':<15} | {'(%)':>10} | {'(%)':>10} |")
+        logger.info(f"|:{'-'*10}|:{'-'*8}|{'-'*10}:|{'-'*10}:|{'-'*7}:|{'-'*10}:|{'-'*15}:|{'-'*15}:|:{'-'*15}|{'-'*10}:|{'-'*10}:|")
         
         for plan in final_plan:
             date_str = plan['date'].strftime('%Y-%m-%d')
@@ -818,6 +837,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             charging_str = f"{plan['planned_charging_kwh']:.3f}"
             level_str = f"{plan['battery_level']:.3f}"
             percent_str = f"{plan['battery_percent']:.1f}"
+            base_target_str = f"{plan['base_target_percent']:.1f}"
             target_str = f"{plan['target_percent']:.1f}"
             
             # Pro lepší čitelnost kategorie cen
@@ -829,9 +849,9 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             }
             category_str = category_map.get(plan['price_category'], plan['price_category'])
             
-            logger.info(f"| {date_str:<10} | {hour_str:<8} | {price_str:>10} | {consumption_str:>10} | {solar_str:>7} | {charging_str:>10} | {level_str:>15} | {percent_str:>15} | {category_str:<15} | {target_str:>10} |")
+            logger.info(f"| {date_str:<10} | {hour_str:<8} | {price_str:>10} | {consumption_str:>10} | {solar_str:>7} | {charging_str:>10} | {level_str:>15} | {percent_str:>15} | {category_str:<15} | {base_target_str:>10} | {target_str:>10} |")
         
-        logger.info("=" * 140)
+        logger.info("=" * 150)
         
         return final_plan
         

@@ -536,11 +536,15 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 # Spotřeba v této hodině
                 consumption = consumption_data[i]['consumption_kwh'] if i < len(consumption_data) else 0
                 
-                # Nabíjení z plánu (s aplikací účinnosti)
-                charging = charging_plan[i] * charging_efficiency if i < len(charging_plan) else 0
+                # Nabíjení z plánu (ze sítě)
+                charging_grid = charging_plan[i] if i < len(charging_plan) else 0
+                
+                # Aplikujeme účinnost na veškeré nabíjení (jak ze sítě, tak ze solárů)
+                effective_solar = solar * charging_efficiency
+                effective_grid_charging = charging_grid * charging_efficiency
                 
                 # Čistý tok energie
-                net_flow = solar - consumption + charging
+                net_flow = effective_solar - consumption + effective_grid_charging
                 
                 # Nový stav baterie
                 current_level = min(battery_capacity, max(0, current_level + net_flow))
@@ -551,8 +555,10 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                     'level': current_level,
                     'net_flow': net_flow,
                     'solar': solar,
+                    'effective_solar': effective_solar,
                     'consumption': consumption,
-                    'charging': charging_plan[i],
+                    'charging_grid': charging_grid,
+                    'effective_grid_charging': effective_grid_charging,
                     'price': price_data[i]['price'],
                     'price_category': price_data[i]['price_category'],
                     'target_level': price_data[i]['target_level'],
@@ -613,6 +619,47 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                     # Aktualizujeme simulaci s aktuálním plánem
                     current_levels = simulate_battery_levels(charging_plan)
                     end_level = current_levels[-1]['level']
+                    
+                    # Kontrola, zda někde v budoucnu nebudeme mít plnou baterii
+                    max_future_level = max(level['level'] for level in current_levels[hour_idx:])
+                    max_level_hour_idx = None
+                    for i, level in enumerate(current_levels[hour_idx:], hour_idx):
+                        if level['level'] == max_future_level:
+                            max_level_hour_idx = i
+                            break
+                    
+                    max_level_hour = current_levels[max_level_hour_idx]['hour'] if max_level_hour_idx else "N/A"
+                    
+                    # Omezení nabíjení na základě budoucího překročení kapacity
+                    if max_future_level >= battery_capacity * 0.999:  # 99.9% je prakticky plná baterie
+                        logger.info(f"Iterace {iteration}: Baterie by byla plná v hodině {max_level_hour}:00 ({max_future_level:.2f} kWh)")
+                        
+                        # Kolik energie máme "navíc" (přes kapacitu)
+                        excess_energy = (max_future_level - battery_capacity) / charging_efficiency
+                        
+                        # O tuto energii snížíme aktuální nabíjení
+                        corrected_charging = max(0, current_hour_charging - excess_energy)
+                        reduction = current_hour_charging - corrected_charging
+                        
+                        if reduction > 0:
+                            logger.info(f"Iterace {iteration}: Snižuji nabíjení o {reduction:.2f} kWh (z {current_hour_charging:.2f} na {corrected_charging:.2f} kWh) aby baterie nepřesahovala kapacitu")
+                            current_hour_charging = corrected_charging
+                            charging_plan[hour_idx] = current_hour_charging
+                        
+                        # Pokud jsme museli snížit nabíjení pod potřebné množství, tak to zaznamenáme
+                        if energy_needed > 0 and reduction > 0:
+                            logger.info(f"Iterace {iteration}: Varování - snížení nabíjení může znamenat, že nedosáhneme cílového stavu baterie")
+                        
+                        # Ověříme, zda jsme vyřešili problém s překročením kapacity
+                        test_levels = simulate_battery_levels(charging_plan)
+                        max_test_level = max(level['level'] for level in test_levels[hour_idx:])
+                        
+                        if max_test_level >= battery_capacity * 0.999:
+                            logger.info(f"Iterace {iteration}: Varování - i po snížení nabíjení stále překračujeme kapacitu baterie ({max_test_level:.2f} kWh)")
+                        
+                        # Pokud jsme snížili nabíjení, potřebujeme ukončit iteraci a zkontrolovat, zda jsme stále splnili cíl
+                        if reduction > 0:
+                            continue
                     
                     # Dosáhli jsme cíle?
                     if end_level >= hour_target:

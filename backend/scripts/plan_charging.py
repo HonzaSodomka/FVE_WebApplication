@@ -414,8 +414,14 @@ def get_consumption_prediction(house_id, current_hour, have_tomorrow_prices=Fals
 
 def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, price_data):
     """
-    Funkce pro kategorizaci hodin podle jejich ceny a určení cílové úrovně nabíjení.
-    V této verzi funkce pouze určuje typ hodin a nevytváří plán nabíjení.
+    Optimalizace nabíjení podle cenově-efektivního přístupu.
+    
+    Pro každou hodinu od nejlevnější:
+    1. Definujeme její cílovou úroveň (target) podle ceny
+    2. Zajistíme, že po této hodině v žádném bodě baterie neklesne pod flexible_min
+    3. Zajistíme, že na konci dne bude baterie nabita minimálně na její target
+    4. Pokud musíme nabíjet v dražší hodině kvůli flexible_min a přesáhneme target na konci, 
+       snížíme nabíjení v nejdražších již naplánovaných hodinách
     
     Args:
         house_id: ID domu
@@ -425,16 +431,18 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         price_data: Pole s cenami elektřiny pro každou hodinu
     
     Returns:
-        Seznam s kategorizací hodin a jejich cílovými úrovněmi nabíjení
+        Seznam s plánem nabíjení pro každou hodinu
     """
     try:
-        logger.info(f"ZAČÁTEK KATEGORIZACE HODIN PRO DŮM {house_id}")
+        logger.info(f"ZAČÁTEK OPTIMALIZACE NABÍJENÍ PRO DŮM {house_id}")
         
         # Získáme základní parametry domu
         battery_capacity = house_data['battery_capacity']
         current_battery_level = house_data['current_battery_level']
         min_battery_level_pct = house_data['min_battery_level']
         min_battery_level = battery_capacity * (min_battery_level_pct / 100)  # Převod % na kWh
+        max_charging_power = house_data['max_charging_power']
+        charging_efficiency = house_data['charging_efficiency'] / 100
         risk_level = house_data['risk_level']
         
         # Definice úrovní podle risk_level
@@ -469,78 +477,327 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         # Počet hodin v plánovacím horizontu
         n_hours = len(price_data)
         
+        # Ujistíme se, že máme konzistentní délku všech dat
+        if len(solar_data) < n_hours:
+            logger.warning(f"Solární data mají méně záznamů ({len(solar_data)}) než horizont plánování ({n_hours})")
+            # Doplníme solární data nulami
+            for i in range(len(solar_data), n_hours):
+                solar_data.append({
+                    'date': price_data[i]['date'],
+                    'hour': price_data[i]['hour'],
+                    'solar_kwh': 0,
+                    'index': i
+                })
+                
+        if len(consumption_data) < n_hours:
+            logger.warning(f"Data spotřeby mají méně záznamů ({len(consumption_data)}) než horizont plánování ({n_hours})")
+            # Doplníme data spotřeby průměrnými hodnotami
+            avg_consumption = sum(item['consumption_kwh'] for item in consumption_data) / len(consumption_data) if consumption_data else 0.2
+            for i in range(len(consumption_data), n_hours):
+                consumption_data.append({
+                    'date': price_data[i]['date'],
+                    'hour': price_data[i]['hour'],
+                    'consumption_kwh': avg_consumption,
+                    'index': i
+                })
+        
         # Výpočet průměrné ceny pro určení kategorií cen
         avg_price = sum(hour['price'] for hour in price_data) / len(price_data)
         low_price_threshold = avg_price * 0.7  # 70% průměrné ceny
         very_low_price_threshold = avg_price * 0.4  # 40% průměrné ceny
         
+        # Určení cílové úrovně pro každou hodinu podle kategorie ceny
+        for hour in price_data:
+            if hour['price'] <= very_low_price_threshold:
+                hour['price_category'] = 'very_low'
+                hour['target_level'] = target_level
+            elif hour['price'] <= low_price_threshold:
+                hour['price_category'] = 'low'
+                hour['target_level'] = standard_min_level
+            else:
+                hour['price_category'] = 'standard'
+                hour['target_level'] = flexible_min_level
+        
+        # Výpis kategorií cen
         logger.info(f"Průměrná cena: {avg_price:.2f} Kč/kWh")
         logger.info(f"Limit nízkých cen: {low_price_threshold:.2f} Kč/kWh")
         logger.info(f"Limit velmi nízkých cen: {very_low_price_threshold:.2f} Kč/kWh")
         
-        # Kategorizace hodin podle ceny
-        categorized_hours = []
-        for hour in price_data:
-            if hour['price'] <= very_low_price_threshold:
-                price_category = 'very_low'
-                target_level_for_hour = target_level
-                target_description = "Cílová rezerva"
-            elif hour['price'] <= low_price_threshold:
-                price_category = 'low'
-                target_level_for_hour = standard_min_level
-                target_description = "Standardní minimum"
-            else:
-                price_category = 'standard'
-                target_level_for_hour = flexible_min_level
-                target_description = "Flexibilní minimum"
+        # Seřadíme hodiny podle ceny (od nejlevnější po nejdražší)
+        sorted_price_indices = sorted(range(n_hours), key=lambda i: price_data[i]['price'])
+        
+        # Funkce pro simulaci stavu baterie na základě plánu nabíjení
+        def simulate_battery_levels(charging_plan):
+            levels = []
+            current_level = current_battery_level
             
-            category_labels = {
+            for i in range(n_hours):
+                # Solární výroba v této hodině
+                solar = solar_data[i]['solar_kwh'] if i < len(solar_data) else 0
+                
+                # Spotřeba v této hodině
+                consumption = consumption_data[i]['consumption_kwh'] if i < len(consumption_data) else 0
+                
+                # Nabíjení z plánu (s aplikací účinnosti)
+                charging = charging_plan[i] * charging_efficiency if i < len(charging_plan) else 0
+                
+                # Čistý tok energie
+                net_flow = solar - consumption + charging
+                
+                # Nový stav baterie
+                current_level = min(battery_capacity, max(0, current_level + net_flow))
+                
+                levels.append({
+                    'hour': price_data[i]['hour'],
+                    'date': price_data[i]['date'],
+                    'level': current_level,
+                    'net_flow': net_flow,
+                    'solar': solar,
+                    'consumption': consumption,
+                    'charging': charging_plan[i],
+                    'price': price_data[i]['price'],
+                    'price_category': price_data[i]['price_category'],
+                    'target_level': price_data[i]['target_level'],
+                    'index': i
+                })
+                
+            return levels
+        
+        # Inicializace plánu nabíjení - žádné nabíjení
+        charging_plan = [0] * n_hours
+        
+        # Počáteční simulace pro zjištění stavu bez nabíjení
+        initial_levels = simulate_battery_levels(charging_plan)
+        
+        # Výpis počátečního stavu
+        logger.info("Počáteční stav baterie bez nabíjení:")
+        for level in initial_levels:
+            logger.info(f"Hodina {level['hour']}:00 - {level['level']:.2f} kWh ({level['level']/battery_capacity*100:.1f}%)")
+        
+        # Pro sledování, které hodiny už máme naplánované
+        planned_hours = set()
+        
+        # Pro každou hodinu v pořadí od nejlevnější
+        for hour_idx in sorted_price_indices:
+            current_hour = price_data[hour_idx]
+            hour_target = current_hour['target_level']
+            
+            logger.info(f"Zpracovávám hodinu {current_hour['hour']}:00 s cenou {current_hour['price']:.2f} Kč/kWh (target: {hour_target/battery_capacity*100:.1f}%)")
+            
+            # 1. Zjistíme, jaký bude stav baterie na konci období s aktuálním plánem
+            current_levels = simulate_battery_levels(charging_plan)
+            end_level = current_levels[-1]['level']
+            
+            # 2. Pokud je stav na konci pod targetem pro tuto hodinu, naplánujeme nabíjení
+            if end_level < hour_target:
+                energy_needed = (hour_target - end_level) / charging_efficiency
+                
+                # Kolik můžeme nabíjet v aktuální hodině
+                max_charging_available = min(energy_needed, max_charging_power)
+                charging_plan[hour_idx] = max_charging_available
+                planned_hours.add(hour_idx)
+                
+                logger.info(f"Plánuji nabíjení {max_charging_available:.2f} kWh v hodině {current_hour['hour']}:00 pro dosažení target {hour_target/battery_capacity*100:.1f}%")
+                
+                # Aktualizujeme simulaci s novým plánem
+                current_levels = simulate_battery_levels(charging_plan)
+                end_level = current_levels[-1]['level']
+                
+                # Pokud jsme nedosáhli cíle, musíme přidat nabíjení v dalších hodinách
+                if end_level < hour_target:
+                    remaining_energy = (hour_target - end_level) / charging_efficiency
+                    
+                    # Seřadíme zbývající hodiny podle ceny (pouze ty, které jsme ještě neplánovali)
+                    remaining_hours = [(i, price_data[i]) for i in range(n_hours) if i != hour_idx and i not in planned_hours]
+                    remaining_hours.sort(key=lambda x: x[1]['price'])
+                    
+                    for idx, _ in remaining_hours:
+                        if remaining_energy <= 0:
+                            break
+                            
+                        # Kolik můžeme nabíjet v této hodině
+                        hour_charging = min(remaining_energy, max_charging_power)
+                        charging_plan[idx] = hour_charging
+                        planned_hours.add(idx)
+                        
+                        logger.info(f"Doplňuji nabíjení {hour_charging:.2f} kWh v hodině {price_data[idx]['hour']}:00 pro dosažení target")
+                        
+                        remaining_energy -= hour_charging
+                        
+                    # Aktualizujeme simulaci po naplánování dodatečného nabíjení
+                    current_levels = simulate_battery_levels(charging_plan)
+            
+            # 3. Kontrola, zda někde neklesne pod flexible_min
+            below_min_hours = [h for h in current_levels if h['level'] < flexible_min_level]
+            
+            if below_min_hours:
+                logger.info(f"Nalezeno {len(below_min_hours)} hodin pod flexible_min ({flexible_min_level/battery_capacity*100:.1f}%)")
+                
+                # Pro každou hodinu pod minimem
+                for min_hour in below_min_hours:
+                    min_hour_idx = min_hour['index']
+                    
+                    # Hledáme předchozí hodiny, kde můžeme nabíjet
+                    available_hours = [(i, price_data[i]) for i in range(min_hour_idx) if i not in planned_hours]
+                    available_hours.sort(key=lambda x: x[1]['price'])  # Seřadíme podle ceny
+                    
+                    # Kolik energie potřebujeme pro dosažení flexible_min
+                    energy_needed = (flexible_min_level - min_hour['level']) / charging_efficiency
+                    
+                    logger.info(f"Hodina {min_hour['hour']}:00 - potřeba dobít {energy_needed:.2f} kWh pro dosažení flexible_min")
+                    
+                    # Rozdělíme nabíjení do nejlevnějších dostupných hodin
+                    for idx, _ in available_hours:
+                        if energy_needed <= 0:
+                            break
+                        
+                        # Kolik můžeme nabíjet v této hodině
+                        hour_charging = min(energy_needed, max_charging_power - charging_plan[idx])
+                        
+                        if hour_charging > 0:
+                            charging_plan[idx] += hour_charging
+                            planned_hours.add(idx)
+                            
+                            logger.info(f"Plánuji {hour_charging:.2f} kWh v hodině {price_data[idx]['hour']}:00 pro řešení flexible_min")
+                            
+                            energy_needed -= hour_charging
+                    
+                    # Pokud jsme stále pod minimem a nemáme žádné volné hodiny před kritickou hodinou,
+                    # musíme použít tu nejlevnější dostupnou, i když už je naplánovaná
+                    if energy_needed > 0:
+                        all_previous_hours = [(i, price_data[i]) for i in range(min_hour_idx)]
+                        all_previous_hours.sort(key=lambda x: x[1]['price'])
+                        
+                        for idx, _ in all_previous_hours:
+                            if energy_needed <= 0:
+                                break
+                            
+                            # Kolik můžeme maximálně nabíjet (bez ohledu na současný plán)
+                            max_possible = max_charging_power - charging_plan[idx]
+                            
+                            if max_possible > 0:
+                                hour_charging = min(energy_needed, max_possible)
+                                charging_plan[idx] += hour_charging
+                                
+                                logger.info(f"NOUZOVÉ nabíjení {hour_charging:.2f} kWh v hodině {price_data[idx]['hour']}:00 pro řešení flexible_min")
+                                
+                                energy_needed -= hour_charging
+                
+                # Aktualizujeme simulaci po řešení hodin pod minimem
+                current_levels = simulate_battery_levels(charging_plan)
+                
+                # 4. Zkontrolujeme, zda jsme na konci nepřesáhli target nejlevnější hodiny
+                end_level = current_levels[-1]['level']
+                cheapest_hour = price_data[sorted_price_indices[0]]
+                cheapest_target = cheapest_hour['target_level']
+                
+                if end_level > cheapest_target:
+                    # Máme přebytečné nabíjení - vypočítáme, kolik můžeme odebrat
+                    excess_energy = (end_level - cheapest_target) * charging_efficiency
+                    
+                    logger.info(f"Přebytečné nabíjení: {excess_energy:.2f} kWh (konec: {end_level:.2f} kWh, target: {cheapest_target:.2f} kWh)")
+                    
+                    # Seřadíme naplánované hodiny podle ceny od nejdražší,
+                    # ale pouze ty, které jsou PO aktuální hodině
+                    planned_indices = [i for i in planned_hours if i > min_hour_idx]
+                    planned_indices.sort(key=lambda i: -price_data[i]['price'])  # Seřazení od nejdražší
+                    
+                    # Odebíráme nabíjení z nejdražších hodin
+                    for idx in planned_indices:
+                        if excess_energy <= 0:
+                            break
+                            
+                        current_charging = charging_plan[idx]
+                        reduction = min(current_charging, excess_energy)
+                        
+                        if reduction > 0:
+                            charging_plan[idx] -= reduction
+                            excess_energy -= reduction
+                            
+                            logger.info(f"Sníženo nabíjení o {reduction:.2f} kWh v hodině {price_data[idx]['hour']}:00 (cena: {price_data[idx]['price']:.2f} Kč/kWh)")
+                            
+                            # Pokud jsme odebrali veškeré nabíjení z této hodiny, odstraníme ji ze seznamu naplánovaných
+                            if charging_plan[idx] <= 0:
+                                charging_plan[idx] = 0
+                                planned_hours.remove(idx)
+                
+                # Aktualizujeme simulaci po úpravách
+                current_levels = simulate_battery_levels(charging_plan)
+        
+        # Finální stav baterie po všech úpravách
+        final_levels = simulate_battery_levels(charging_plan)
+        
+        # Vytvoření finálního plánu
+        final_plan = []
+        for i in range(n_hours):
+            level = final_levels[i]
+            plan = {
+                'hour': level['hour'],
+                'date': level['date'],
+                'planned_charging_kwh': charging_plan[i],
+                'battery_level': level['level'],
+                'battery_percent': level['level'] / battery_capacity * 100,
+                'price': level['price'],
+                'price_category': level['price_category'],
+                'target_level': level['target_level'],
+                'target_percent': level['target_level'] / battery_capacity * 100,
+                'solar_production': level['solar'],
+                'consumption': level['consumption']
+            }
+            final_plan.append(plan)
+        
+        # Logování výsledků
+        logger.info("Finální plán nabíjení:")
+        for plan in final_plan:
+            if plan['planned_charging_kwh'] > 0:
+                logger.info(f"Hodina {plan['hour']}:00 - nabíjení {plan['planned_charging_kwh']:.2f} kWh (cena: {plan['price']:.2f} Kč/kWh)")
+        
+        # Výpočet celkových nákladů
+        total_energy = sum(plan['planned_charging_kwh'] for plan in final_plan)
+        total_cost = sum(plan['planned_charging_kwh'] * plan['price'] for plan in final_plan)
+        
+        logger.info(f"Celkové nabíjení: {total_energy:.2f} kWh")
+        logger.info(f"Celkové náklady: {total_cost:.2f} Kč")
+        
+        # Výpis stavu baterie na konci plánovacího horizontu
+        if final_plan:
+            last_plan = final_plan[-1]
+            logger.info(f"Konečný stav baterie: {last_plan['battery_level']:.2f} kWh ({last_plan['battery_percent']:.1f}%)")
+        
+        # Výpis finálního plánu v přehledné tabulce
+        logger.info("=" * 120)
+        logger.info(f"PLÁN NABÍJENÍ PRO DŮM {house_id}")
+        logger.info("=" * 120)
+        logger.info(f"| {'Datum':<10} | {'Hodina':<8} | {'Cena':>10} | {'Spotřeba':>10} | {'Solár':>7} | {'Nabíjení':>10} | {'Stav baterie':>15} | {'Stav baterie':>15} | {'Kategorie':<10} |")
+        logger.info(f"| {'':<10} | {'':<8} | {'(Kč/kWh)':>10} | {'(kWh)':>10} | {'(kWh)':>7} | {'(kWh)':>10} | {'(kWh)':>15} | {'(%)':>15} | {'ceny':<10} |")
+        logger.info(f"|:{'-'*10}|:{'-'*8}|{'-'*10}:|{'-'*10}:|{'-'*7}:|{'-'*10}:|{'-'*15}:|{'-'*15}:|:{'-'*10}|")
+        
+        for plan in final_plan:
+            date_str = plan['date'].strftime('%Y-%m-%d')
+            hour_str = f"{plan['hour']}:00"
+            price_str = f"{plan['price']:.3f}"
+            consumption_str = f"{plan['consumption']:.3f}"
+            solar_str = f"{plan['solar_production']:.3f}"
+            charging_str = f"{plan['planned_charging_kwh']:.3f}"
+            level_str = f"{plan['battery_level']:.3f}"
+            percent_str = f"{plan['battery_percent']:.1f}"
+            
+            category_map = {
                 'very_low': 'Velmi nízká',
                 'low': 'Nízká',
                 'standard': 'Standardní'
             }
+            category_str = category_map.get(plan['price_category'], plan['price_category'])
             
-            # Vytvoření záznamu pro tuto hodinu
-            hour_info = {
-                'date': hour['date'],
-                'hour': hour['hour'],
-                'price': hour['price'],
-                'price_category': price_category,
-                'price_category_label': category_labels[price_category],
-                'target_level': target_level_for_hour,
-                'target_percent': (target_level_for_hour / battery_capacity) * 100,
-                'target_description': target_description
-            }
-            
-            categorized_hours.append(hour_info)
+            logger.info(f"| {date_str:<10} | {hour_str:<8} | {price_str:>10} | {consumption_str:>10} | {solar_str:>7} | {charging_str:>10} | {level_str:>15} | {percent_str:>15} | {category_str:<10} |")
         
-        # Výpis kategorizovaných hodin do logu
-        logger.info("=" * 125)
-        logger.info(f"KATEGORIZACE HODIN PRO DŮM {house_id}")
-        logger.info("=" * 125)
-        logger.info(f"| {'Datum':<12} | {'Hodina':<8} | {'Cena':>10} | {'Kategorie ceny':<20} | {'Cílová úroveň':>15} | {'Cílová úroveň (%)':<18} | {'Popis':^25} |")
-        logger.info(f"| {'':<12} | {'':<8} | {'(Kč/kWh)':>10} | {'':<20} | {'(kWh)':>15} | {'(%)':>18} | {'':<25} |")
-        logger.info(f"|:{'-'*12}|:{'-'*8}|{'-'*10}:|:{'-'*20}|{'-'*15}:|{'-'*18}:|:{'-'*25}|")
+        logger.info("=" * 120)
         
-        for hour_info in categorized_hours:
-            date_str = hour_info['date'].strftime('%Y-%m-%d')
-            hour_str = f"{hour_info['hour']}:00"
-            price_str = f"{hour_info['price']:.3f}"
-            category_str = hour_info['price_category_label']
-            target_str = f"{hour_info['target_level']:.3f}"
-            target_percent_str = f"{hour_info['target_percent']:.1f}"
-            description_str = hour_info['target_description']
-            
-            logger.info(f"| {date_str:<12} | {hour_str:<8} | {price_str:>10} | {category_str:<20} | {target_str:>15} | {target_percent_str:>18} | {description_str:^25} |")
-        
-        logger.info("=" * 125)
-        
-        # Vrátit výsledky kategorizace
-        return categorized_hours
+        return final_plan
         
     except Exception as e:
-        logger.error(f"CHYBA PŘI KATEGORIZACI HODIN: {str(e)}", exc_info=True)
-        # V případě chyby vracíme prázdné pole
+        logger.error(f"CHYBA PŘI OPTIMALIZACI NABÍJENÍ: {str(e)}", exc_info=True)
+        # V případě chyby vracíme prázdný plán
         return []
     
 def save_charging_schedule(house_id, charging_plan):

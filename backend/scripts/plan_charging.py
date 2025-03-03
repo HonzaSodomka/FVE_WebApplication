@@ -412,6 +412,109 @@ def get_consumption_prediction(house_id, current_hour, have_tomorrow_prices=Fals
         if 'conn' in locals():
             conn.close()
 
+def get_historical_price_categories(days=30):
+    """
+    Získá historická data o cenách a vypočítá percentilové prahy pro kategorizaci.
+    
+    Args:
+        days: Počet dní historie pro analýzu (výchozí 30)
+    
+    Returns:
+        Dict: Slovník s prahovými hodnotami pro jednotlivé kategorie
+    """
+    try:
+        conn = psycopg2.connect(
+            dbname="fve_db",
+            user="postgres",
+            password="heslo",
+            host="db"
+        )
+        cur = conn.cursor()
+        
+        # Získání dat za posledních X dní
+        start_date = datetime.now().date() - timedelta(days=days)
+        
+        cur.execute("""
+            SELECT price_czk 
+            FROM api_pricedata 
+            WHERE date >= %s
+            ORDER BY price_czk
+        """, [start_date])
+        
+        prices = [price[0] / 1000 for price in cur.fetchall()]  # Převod z Kč/MWh na Kč/kWh
+        
+        if not prices:
+            logger.warning(f"Žádná historická data o cenách nebyla nalezena za posledních {days} dní")
+            # Vrátíme výchozí hodnoty pokud nemáme data
+            return {
+                'extremely_low': 0.5,  # Výchozí hodnoty, pokud nemáme historická data
+                'low': 1.0,
+                'average': 2.0,
+                'high': 3.0
+            }
+        
+        # Výpočet percentilů
+        num_prices = len(prices)
+        extremely_low_threshold = prices[int(num_prices * 0.1)]  # 10. percentil
+        low_threshold = prices[int(num_prices * 0.25)]           # 25. percentil
+        average_high_threshold = prices[int(num_prices * 0.75)]  # 75. percentil
+        
+        # Statistiky pro logování
+        min_price = min(prices)
+        max_price = max(prices)
+        avg_price = sum(prices) / len(prices)
+        
+        categories = {
+            'extremely_low': extremely_low_threshold,
+            'low': low_threshold,
+            'average': average_high_threshold,
+            'high': max_price
+        }
+        
+        logger.info(f"Kategorie cen vypočteny z {num_prices} historických záznamů:")
+        logger.info(f"  - Extrémně nízké (0-10%): do {extremely_low_threshold:.3f} Kč/kWh")
+        logger.info(f"  - Nízké (10-25%): {extremely_low_threshold:.3f} - {low_threshold:.3f} Kč/kWh")
+        logger.info(f"  - Průměrné (25-75%): {low_threshold:.3f} - {average_high_threshold:.3f} Kč/kWh")
+        logger.info(f"  - Vysoké (75-100%): nad {average_high_threshold:.3f} Kč/kWh")
+        logger.info(f"Statistiky cen: min={min_price:.3f}, max={max_price:.3f}, avg={avg_price:.3f} Kč/kWh")
+        
+        return categories
+        
+    except Exception as e:
+        logger.error(f"Chyba při získávání historických kategorií cen: {str(e)}")
+        # Vrátíme výchozí hodnoty v případě chyby
+        return {
+            'extremely_low': 0.5,
+            'low': 1.0,
+            'average': 2.0,
+            'high': 3.0
+        }
+    finally:
+        if 'cur' in locals():
+            cur.close()
+        if 'conn' in locals():
+            conn.close()
+
+def categorize_price(price, categories):
+    """
+    Kategorizuje cenu do jedné ze čtyř kategorií.
+    
+    Args:
+        price: Cena k kategoryzaci (Kč/kWh)
+        categories: Slovník s prahovými hodnotami pro kategorie
+        
+    Returns:
+        String: Název kategorie ('extremely_low', 'low', 'average', 'high')
+    """
+    if price <= categories['extremely_low']:
+        return 'extremely_low'
+    elif price <= categories['low']:
+        return 'low'
+    elif price <= categories['average']:
+        return 'average'
+    else:
+        return 'high'
+    
 def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, price_data):
     """
     Optimalizace nabíjení podle cenově-efektivního přístupu.
@@ -443,34 +546,33 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         charging_efficiency = house_data['charging_efficiency'] / 100
         risk_level = house_data['risk_level']
         
-        # Definice úrovní podle risk_level
-        risk_level_settings = {
+        # Získání historických kategorií cen
+        price_categories = get_historical_price_categories()
+        
+        # Definice cílových úrovní baterie podle rizikového profilu a kategorie ceny
+        target_levels = {
             'LOW': {
-                'standard_min': 50,  # Standardní minimum 50%
-                'flexible_min': 30,  # Flexibilní minimum 30%
-                'target_reserve': 70  # Cílová rezerva 70%
+                'extremely_low': 0.80,  # 80% kapacity baterie
+                'low': 0.60,            # 60% kapacity
+                'average': 0.40,        # 40% kapacity
+                'high': 0.20            # 20% kapacity
             },
             'MEDIUM': {
-                'standard_min': 25,
-                'flexible_min': 15,
-                'target_reserve': 35
+                'extremely_low': 0.70,  # 70% kapacity baterie
+                'low': 0.50,            # 50% kapacity
+                'average': 0.30,        # 30% kapacity
+                'high': 0.15            # 15% kapacity
             },
             'HIGH': {
-                'standard_min': 10,
-                'flexible_min': 5,
-                'target_reserve': 20
+                'extremely_low': 0.50,  # 50% kapacity baterie
+                'low': 0.35,            # 35% kapacity
+                'average': 0.25,        # 25% kapacity
+                'high': 0.10            # 10% kapacity
             }
         }
         
-        # Nastavení podle zvoleného risk_level
-        settings = risk_level_settings.get(
-            risk_level, 
-            risk_level_settings['MEDIUM']  # Výchozí hodnoty
-        )
-        
-        standard_min_level = battery_capacity * (settings['standard_min'] / 100)
-        flexible_min_level = battery_capacity * (settings['flexible_min'] / 100)
-        target_level = battery_capacity * (settings['target_reserve'] / 100)
+        # Použití výchozího středního rizika, pokud nemáme definované pro daný risk_level
+        target_profile = target_levels.get(risk_level, target_levels['MEDIUM'])
         
         # Počet hodin v plánovacím horizontu
         n_hours = len(price_data)
@@ -499,27 +601,20 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                     'index': i
                 })
         
-        # Výpočet průměrné ceny pro určení kategorií cen
-        avg_price = sum(hour['price'] for hour in price_data) / len(price_data)
-        low_price_threshold = avg_price * 0.7  # 70% průměrné ceny
-        very_low_price_threshold = avg_price * 0.4  # 40% průměrné ceny
-        
-        # Určení cílové úrovně pro každou hodinu podle kategorie ceny
+        # Kategorizace cen pro každou hodinu
         for hour in price_data:
-            if hour['price'] <= very_low_price_threshold:
-                hour['price_category'] = 'very_low'
-                hour['target_level'] = target_level
-            elif hour['price'] <= low_price_threshold:
-                hour['price_category'] = 'low'
-                hour['target_level'] = standard_min_level
-            else:
-                hour['price_category'] = 'standard'
-                hour['target_level'] = flexible_min_level
+            price_category = categorize_price(hour['price'], price_categories)
+            hour['price_category'] = price_category
+            
+            # Nastavení cílové úrovně baterie podle kategorie a rizikového profilu
+            target_percentage = target_profile[price_category]
+            hour['target_level'] = battery_capacity * target_percentage
+            hour['target_percentage'] = target_percentage * 100  # Pro logování
         
-        # Výpis kategorií cen
-        logger.info(f"Průměrná cena: {avg_price:.2f} Kč/kWh")
-        logger.info(f"Limit nízkých cen: {low_price_threshold:.2f} Kč/kWh")
-        logger.info(f"Limit velmi nízkých cen: {very_low_price_threshold:.2f} Kč/kWh")
+        # Výpis kategorií cen pro tento plán
+        logger.info(f"Rizikový profil: {risk_level}")
+        for category, percentage in target_profile.items():
+            logger.info(f"  - Kategorie '{category}': cílová úroveň baterie {percentage*100:.1f}% ({percentage*battery_capacity:.2f} kWh)")
         
         # Seřadíme hodiny podle ceny (od nejlevnější po nejdražší)
         sorted_price_indices = sorted(range(n_hours), key=lambda i: price_data[i]['price'])
@@ -547,7 +642,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 net_flow = effective_solar - consumption + effective_grid_charging
                 
                 # Nový stav baterie
-                current_level = max(0, current_level + net_flow)
+                current_level = max(0, min(battery_capacity, current_level + net_flow))
                 
                 levels.append({
                     'hour': price_data[i]['hour'],
@@ -583,7 +678,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             current_hour = price_data[hour_idx]
             hour_target = current_hour['target_level']
             
-            logger.info(f"Zpracovávám hodinu {current_hour['hour']}:00 s cenou {current_hour['price']:.2f} Kč/kWh (target: {hour_target/battery_capacity*100:.1f}%)")
+            logger.info(f"Zpracovávám hodinu {current_hour['hour']}:00 s cenou {current_hour['price']:.2f} Kč/kWh (kategorie: {current_hour['price_category']}, target: {current_hour['target_percentage']:.1f}%)")
             
             # 1. Zjistíme, jaký bude stav baterie na konci období s aktuálním plánem
             current_levels = simulate_battery_levels(charging_plan)
@@ -692,7 +787,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         logger.info("Finální plán nabíjení:")
         for plan in final_plan:
             if plan['planned_charging_kwh'] > 0:
-                logger.info(f"Hodina {plan['hour']}:00 - nabíjení {plan['planned_charging_kwh']:.2f} kWh (cena: {plan['price']:.2f} Kč/kWh)")
+                logger.info(f"Hodina {plan['hour']}:00 - nabíjení {plan['planned_charging_kwh']:.2f} kWh (cena: {plan['price']:.2f} Kč/kWh, kategorie: {plan['price_category']})")
         
         # Výpočet celkových nákladů
         total_energy = sum(plan['planned_charging_kwh'] for plan in final_plan)
@@ -707,12 +802,12 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             logger.info(f"Konečný stav baterie: {last_plan['battery_level']:.2f} kWh ({last_plan['battery_percent']:.1f}%)")
         
         # Výpis finálního plánu v přehledné tabulce
-        logger.info("=" * 120)
+        logger.info("=" * 140)
         logger.info(f"PLÁN NABÍJENÍ PRO DŮM {house_id}")
-        logger.info("=" * 120)
-        logger.info(f"| {'Datum':<10} | {'Hodina':<8} | {'Cena':>10} | {'Spotřeba':>10} | {'Solár':>7} | {'Nabíjení':>10} | {'Stav baterie':>15} | {'Stav baterie':>15} | {'Kategorie':<10} |")
-        logger.info(f"| {'':<10} | {'':<8} | {'(Kč/kWh)':>10} | {'(kWh)':>10} | {'(kWh)':>7} | {'(kWh)':>10} | {'(kWh)':>15} | {'(%)':>15} | {'ceny':<10} |")
-        logger.info(f"|:{'-'*10}|:{'-'*8}|{'-'*10}:|{'-'*10}:|{'-'*7}:|{'-'*10}:|{'-'*15}:|{'-'*15}:|:{'-'*10}|")
+        logger.info("=" * 140)
+        logger.info(f"| {'Datum':<10} | {'Hodina':<8} | {'Cena':>10} | {'Spotřeba':>10} | {'Solár':>7} | {'Nabíjení':>10} | {'Stav baterie':>15} | {'Stav baterie':>15} | {'Kategorie':<15} | {'Cíl':>10} |")
+        logger.info(f"| {'':<10} | {'':<8} | {'(Kč/kWh)':>10} | {'(kWh)':>10} | {'(kWh)':>7} | {'(kWh)':>10} | {'(kWh)':>15} | {'(%)':>15} | {'ceny':<15} | {'(%)':>10} |")
+        logger.info(f"|:{'-'*10}|:{'-'*8}|{'-'*10}:|{'-'*10}:|{'-'*7}:|{'-'*10}:|{'-'*15}:|{'-'*15}:|:{'-'*15}|{'-'*10}:|")
         
         for plan in final_plan:
             date_str = plan['date'].strftime('%Y-%m-%d')
@@ -723,17 +818,20 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             charging_str = f"{plan['planned_charging_kwh']:.3f}"
             level_str = f"{plan['battery_level']:.3f}"
             percent_str = f"{plan['battery_percent']:.1f}"
+            target_str = f"{plan['target_percent']:.1f}"
             
+            # Pro lepší čitelnost kategorie cen
             category_map = {
-                'very_low': 'Velmi nízká',
+                'extremely_low': 'Extrémně nízká',
                 'low': 'Nízká',
-                'standard': 'Standardní'
+                'average': 'Průměrná',
+                'high': 'Vysoká'
             }
             category_str = category_map.get(plan['price_category'], plan['price_category'])
             
-            logger.info(f"| {date_str:<10} | {hour_str:<8} | {price_str:>10} | {consumption_str:>10} | {solar_str:>7} | {charging_str:>10} | {level_str:>15} | {percent_str:>15} | {category_str:<10} |")
+            logger.info(f"| {date_str:<10} | {hour_str:<8} | {price_str:>10} | {consumption_str:>10} | {solar_str:>7} | {charging_str:>10} | {level_str:>15} | {percent_str:>15} | {category_str:<15} | {target_str:>10} |")
         
-        logger.info("=" * 120)
+        logger.info("=" * 140)
         
         return final_plan
         
@@ -858,7 +956,7 @@ def plan_charging_for_house(house_id):
             have_tomorrow_prices=have_tomorrow_prices
         )
         
-        # 6. Optimalizace plánu nabíjení s novým algoritmen
+        # 6. Optimalizace plánu nabíjení s novým algoritmem využívajícím historické kategorie cen
         charging_plan = optimize_charging_plan(
             house_id,
             house_data,

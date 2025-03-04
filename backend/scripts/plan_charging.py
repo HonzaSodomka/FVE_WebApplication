@@ -864,6 +864,7 @@ def save_charging_schedule(house_id, charging_plan):
     """
     Uloží plán nabíjení do databáze.
     Nahrazuje stávající plány pro daný dům.
+    Ignoruje velmi malé hodnoty nabíjení (menší než 0.01 kWh).
     """
     try:
         conn = psycopg2.connect(
@@ -880,15 +881,18 @@ def save_charging_schedule(house_id, charging_plan):
             WHERE house_id = %s
         """, [house_id])
         
-        # Uložíme nové plány
+        # Uložíme nové plány, ignorujeme zanedbatelně malé hodnoty
         saved_count = 0
+        MIN_CHARGING_THRESHOLD = 0.01  # Minimální hodnota v kWh, která se bude ukládat
         
         for plan_item in charging_plan:
             hour = plan_item['hour']
             amount = plan_item['planned_charging_kwh']
             date = plan_item['date']
             
-            if amount <= 0:
+            # Přeskočíme velmi malé hodnoty nabíjení
+            if amount < MIN_CHARGING_THRESHOLD:
+                logger.debug(f"Ignoruji zanedbatelné nabíjení {amount:.10f} kWh pro hodinu {hour}:00")
                 continue
             
             cur.execute("""

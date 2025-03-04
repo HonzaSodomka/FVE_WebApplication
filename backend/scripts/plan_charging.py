@@ -652,10 +652,11 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 net_flow = effective_solar - consumption + effective_grid_charging
                 
                 # Nový stav baterie
-                if overcharge is True:
-                    current_level = max(0, current_level + net_flow)
-                else:
+                if overcharge is False:
                     current_level = max(0, min(battery_capacity, current_level + net_flow))
+                else:
+                    current_level = max(0, current_level + net_flow)
+                    
                 
                 levels.append({
                     'hour': price_data[i]['hour'],

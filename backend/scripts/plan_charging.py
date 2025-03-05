@@ -630,7 +630,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         sorted_price_indices = sorted(range(n_hours), key=lambda i: price_data[i]['price'])
         
         # Funkce pro simulaci stavu baterie na základě plánu nabíjení
-        def simulate_battery_levels(charging_plan, overcharge):
+        def simulate_battery_levels(charging_plan, overcharge_start_idx=None):
             levels = []
             current_level = current_battery_level
             
@@ -652,11 +652,12 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 net_flow = effective_solar - consumption + effective_grid_charging
                 
                 # Nový stav baterie
-                if overcharge is False:
-                    current_level = max(0, min(battery_capacity, current_level + net_flow))
-                else:
+                if overcharge_start_idx is not None and i >= overcharge_start_idx:
+                    # Umožníme přesah kapacity pouze od zadaného indexu dále
                     current_level = max(0, current_level + net_flow)
-                    
+                else:
+                    # Pro ostatní hodiny omezujeme na kapacitu
+                    current_level = max(0, min(battery_capacity, current_level + net_flow))
                 
                 levels.append({
                     'hour': price_data[i]['hour'],
@@ -681,7 +682,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         charging_plan = [0] * n_hours
         
         # Počáteční simulace pro zjištění stavu bez nabíjení
-        initial_levels = simulate_battery_levels(charging_plan, False)
+        initial_levels = simulate_battery_levels(charging_plan)
         
         # Výpis počátečního stavu
         logger.info("Počáteční stav baterie bez nabíjení:")
@@ -698,7 +699,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             logger.info(f"Zpracovávám hodinu {current_hour['hour']}:00 s cenou {current_hour['price']:.2f} Kč/kWh (kategorie: {current_hour['price_category']}, základní cíl: {current_hour['base_target_percentage']:.1f}%, cíl s rezervou: {current_hour['target_percentage']:.1f}%)")
             
             # 1. Zjistíme, jaký bude stav baterie na konci období s aktuálním plánem
-            current_levels = simulate_battery_levels(charging_plan, False)
+            current_levels = simulate_battery_levels(charging_plan)
             end_level = current_levels[-1]['level']
             
             # 2. Plánování nabíjení pro aktuální hodinu
@@ -716,9 +717,10 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 logger.info(f"Plánuji nabíjení pro hodinu {current_hour['hour']}:00")
                 
                 # Simulujeme plán s maximálním nabíjením v této hodině
+                # Simulujeme plán s maximálním nabíjením v této hodině
                 test_charging_plan = charging_plan.copy()
                 test_charging_plan[hour_idx] = max_hour_charging
-                test_levels = simulate_battery_levels(test_charging_plan, True)
+                test_levels = simulate_battery_levels(test_charging_plan, hour_idx)
                 
                 # Kontrolujeme:
                 # 1. Přesah 100% kapacity (v jakékoliv budoucí hodině)
@@ -762,7 +764,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 charging_plan[hour_idx] = planned_charging
                 
                 # Aktualizujeme simulaci a zkontrolujeme výsledek
-                current_levels = simulate_battery_levels(charging_plan, False)
+                current_levels = simulate_battery_levels(charging_plan)
                 end_level = current_levels[-1]['level']
                 
                 # Kontrolujeme vůči základnímu cíli (bez rezervy)
@@ -783,7 +785,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 logger.info(f"Konečný stav baterie {end_level:.2f} kWh již splňuje základní cíl {base_target:.2f} kWh, není potřeba nabíjet")
         
         # Finální stav baterie po všech úpravách
-        final_levels = simulate_battery_levels(charging_plan, False)
+        final_levels = simulate_battery_levels(charging_plan)
         
         # Vytvoření finálního plánu
         final_plan = []

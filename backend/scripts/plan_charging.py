@@ -759,7 +759,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                     # Kolik energie potřebujeme přidat do této hodiny
                     energy_to_add = min(remaining_deficit, additional_charging_possible)
                     
-                    # Zkusíme přidat nabíjení a simulovat výsledek
+                    #Zkusíme přidat nabíjení a simulovat výsledek
                     test_plan = charging_plan.copy()
                     test_plan[prev_idx] += energy_to_add
                     

@@ -166,7 +166,8 @@ def get_house_data(house_id):
 
 def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
     """
-    Získá předpověď solární výroby a upraví ji podle výkonu domu
+    Získá předpověď solární výroby a upraví ji podle výkonu domu.
+    Posunuje hodiny dozadu o 1, protože předpovědi jsou pro následující hodinu.
     
     Args:
         house_power: Výkon solárních panelů v kWp
@@ -200,26 +201,22 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
         """, [today])
         
         rows = cur.fetchall()
-        logger.info(f"Načteno {len(rows)} záznamů predikce solární výroby")
+        logger.info(f"Načteno {len(rows)} záznamů predikce solární výroby pro dnešek")
         
         # Přepočítací faktory
         power_ratio = house_power / 20  # Základní predikce je na 20kWp
         
         # Vytvoříme slovník s produkcí dle hodin pro dnešek
+        # Přímé mapování z hodin na hodiny, ale s posunem o 1 hodinu zpět
         hour_production_today = {}
         
         for timestamp, wh in rows:
-            hour = timestamp.hour - 1
-            logger.info(f"{timestamp}, {hour}")
+            db_hour = timestamp.hour
+            target_hour = max(0, db_hour - 1)  # Posun o 1 hodinu zpět, ale ne pod 0
             
-            # Poslední záznam, který není v celé hodině, přiřadíme k další hodině
-            if timestamp.minute > 0 and hour < 23:
-                next_hour = hour + 1
-                if next_hour not in hour_production_today:
-                    hour_production_today[next_hour] = wh
-            else:
-                if hour not in hour_production_today:
-                    hour_production_today[hour] = wh
+            # Ukládáme hodnoty přímo do cílové hodiny (s posunem -1)
+            # Pokud máme více hodnot pro stejnou hodinu, bereme poslední
+            hour_production_today[target_hour] = wh
         
         # Vytvoříme pole solární produkce pro všechny hodiny v plánovacím horizontu
         if have_tomorrow_prices:
@@ -235,6 +232,7 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
         # Plnění dat pro dnešek
         for hour in range(current_hour, 24):
             solar_kwh = hour_production_today.get(hour, 0) * power_ratio / 1000
+            
             solar_data.append({
                 'date': today,
                 'hour': hour,
@@ -254,22 +252,24 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
             """, [tomorrow])
             
             tomorrow_rows = cur.fetchall()
+            logger.info(f"Načteno {len(tomorrow_rows)} záznamů predikce solární výroby pro zítřek")
+            
+            # Vytvoříme slovník s produkcí dle hodin pro zítřek
+            # Přímé mapování z hodin na hodiny, ale s posunem o 1 hodinu zpět
             hour_production_tomorrow = {}
             
             for timestamp, wh in tomorrow_rows:
-                hour = timestamp.hour - 1
+                db_hour = timestamp.hour
+                target_hour = max(0, db_hour - 1)  # Posun o 1 hodinu zpět, ale ne pod 0
                 
-                if timestamp.minute > 0 and hour < 23:
-                    next_hour = hour + 1
-                    if next_hour not in hour_production_tomorrow:
-                        hour_production_tomorrow[next_hour] = wh
-                else:
-                    if hour not in hour_production_tomorrow:
-                        hour_production_tomorrow[hour] = wh
+                # Ukládáme hodnoty přímo do cílové hodiny (s posunem -1)
+                # Pokud máme více hodnot pro stejnou hodinu, bereme poslední
+                hour_production_tomorrow[target_hour] = wh
                         
             # Plnění dat pro zítřek
             for hour in range(24):
                 solar_kwh = hour_production_tomorrow.get(hour, 0) * power_ratio / 1000
+                
                 solar_data.append({
                     'date': tomorrow,
                     'hour': hour,
@@ -278,7 +278,7 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
                 })
                 index += 1
         
-        logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Vytvořena předpověď pro {len(solar_data)} hodin")
+        logger.info(f"NAČÍTÁNÍ SOLÁRNÍ PREDIKCE: Vytvořena předpověď pro {len(solar_data)} hodin s posunem o -1 hodinu")
         
         return solar_data
         

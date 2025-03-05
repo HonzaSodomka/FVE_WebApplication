@@ -206,24 +206,19 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
         power_ratio = house_power / 20  # Základní predikce je na 20kWp
         
         # Vytvoříme slovník s produkcí dle hodin pro dnešek
-        # OPRAVA: Přiřazujeme výrobu k předchozí hodině (posun o -1)
         hour_production_today = {}
         
         for timestamp, wh in rows:
-            # OPRAVA: Přiřadíme k předchozí hodině
             hour = timestamp.hour
-            correct_hour = max(0, hour - 1)  # Zajistíme, že hodina neklesne pod 0
             
-            # Pokud záznam není v celé hodině
-            if timestamp.minute > 0:
-                # Pokud záznam není v celé hodině, už ho nepřiřazujeme k další hodině
-                # OPRAVA: Přiřazujeme k aktuální hodině mínus 1
-                if correct_hour not in hour_production_today:
-                    hour_production_today[correct_hour] = wh
+            # Poslední záznam, který není v celé hodině, přiřadíme k další hodině
+            if timestamp.minute > 0 and hour < 23:
+                next_hour = hour + 1
+                if next_hour not in hour_production_today:
+                    hour_production_today[next_hour] = wh
             else:
-                # Pro záznamy v celé hodině
-                if correct_hour not in hour_production_today:
-                    hour_production_today[correct_hour] = wh
+                if hour not in hour_production_today:
+                    hour_production_today[hour] = wh
         
         # Vytvoříme pole solární produkce pro všechny hodiny v plánovacím horizontu
         if have_tomorrow_prices:
@@ -241,7 +236,7 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
             solar_kwh = hour_production_today.get(hour, 0) * power_ratio / 1000
             solar_data.append({
                 'date': today,
-                'hour': hour,
+                'hour': hour-1,
                 'solar_kwh': solar_kwh,
                 'index': index
             })
@@ -258,29 +253,25 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
             """, [tomorrow])
             
             tomorrow_rows = cur.fetchall()
-            # OPRAVA: Přiřazujeme výrobu k předchozí hodině (posun o -1)
             hour_production_tomorrow = {}
             
             for timestamp, wh in tomorrow_rows:
-                # OPRAVA: Přiřadíme k předchozí hodině
                 hour = timestamp.hour
-                correct_hour = max(0, hour - 1)  # Zajistíme, že hodina neklesne pod 0
                 
-                if timestamp.minute > 0:
-                    # OPRAVA: Přiřazujeme k aktuální hodině mínus 1
-                    if correct_hour not in hour_production_tomorrow:
-                        hour_production_tomorrow[correct_hour] = wh
+                if timestamp.minute > 0 and hour < 23:
+                    next_hour = hour + 1
+                    if next_hour not in hour_production_tomorrow:
+                        hour_production_tomorrow[next_hour] = wh
                 else:
-                    # Pro záznamy v celé hodině
-                    if correct_hour not in hour_production_tomorrow:
-                        hour_production_tomorrow[correct_hour] = wh
+                    if hour not in hour_production_tomorrow:
+                        hour_production_tomorrow[hour] = wh
                         
             # Plnění dat pro zítřek
             for hour in range(24):
                 solar_kwh = hour_production_tomorrow.get(hour, 0) * power_ratio / 1000
                 solar_data.append({
                     'date': tomorrow,
-                    'hour': hour,
+                    'hour': hour-1,
                     'solar_kwh': solar_kwh,
                     'index': index
                 })

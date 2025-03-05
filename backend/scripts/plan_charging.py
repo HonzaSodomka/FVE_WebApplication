@@ -720,6 +720,46 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             logger.info("Žádné kritické hodiny nalezeny - baterie neklesne pod minimální požadovanou úroveň.")
         else:
             logger.info(f"Nalezeno {len(critical_hours)} kritických hodin, kde baterie klesá pod minimální požadovanou úroveň.")
+            
+            # Pro každou kritickou hodinu vypíšeme všechny předchozí hodiny seřazené podle ceny
+            logger.info(f"=== POTENCIÁLNÍ HODINY NABÍJENÍ PRO KRITICKÉ BODY ===")
+            
+            for critical_idx, critical_hour in enumerate(critical_hours):
+                critical_hour_index = critical_hour['index']
+                critical_date = critical_hour['date']
+                critical_hour_num = critical_hour['hour']
+                critical_deficit = critical_hour['deficit']
+                
+                logger.info(f"--- KRITICKÝ BOD #{critical_idx+1}: {critical_date} {critical_hour_num}:00, Deficit: {critical_deficit:.2f} kWh ---")
+                
+                # Vybere všechny předchozí hodiny (včetně aktuální)
+                previous_hours_indices = list(range(critical_hour_index + 1))
+                
+                # Seřadí je podle ceny
+                previous_hours_sorted = sorted(previous_hours_indices, key=lambda idx: price_data[idx]['price'])
+                
+                # Vypíše je seřazené
+                logger.info(f"Předchozí hodiny seřazené podle ceny (od nejlevnější):")
+                logger.info(f"| {'Pořadí':<6} | {'Datum':<10} | {'Hodina':<8} | {'Cena':>10} | {'Solar':>10} | {'Max.Nabíjení':>15} |")
+                logger.info(f"| {'':<6} | {'':<10} | {'':<8} | {'(Kč/kWh)':>10} | {'(kWh)':>10} | {'(kWh)':>15} |")
+                logger.info(f"|:{'-'*6}|:{'-'*10}|:{'-'*8}|{'-'*10}:|{'-'*10}:|{'-'*15}:|")
+                
+                for rank, idx in enumerate(previous_hours_sorted):
+                    hour_data = price_data[idx]
+                    hour_date = hour_data['date']
+                    hour_num = hour_data['hour']
+                    hour_price = hour_data['price']
+                    
+                    # Najdi odpovídající solární data
+                    solar_hour = next((s for s in solar_data if s['hour'] == hour_num and s['date'] == hour_date), None)
+                    solar_production = solar_hour['solar_kwh'] if solar_hour else 0
+                    
+                    # Vypočítej maximální možné nabíjení v této hodině
+                    available_charging_power = max(0, max_charging_power - solar_production)
+                    
+                    logger.info(f"| {rank+1:<6} | {hour_date.strftime('%Y-%m-%d'):<10} | {hour_num}:00 | {hour_price:.4f} | {solar_production:.2f} | {available_charging_power:.2f} |")
+                
+                logger.info(f"---------------------------------------------------")
         
         # Pro každou hodinu v pořadí od nejlevnější
         for hour_idx in sorted_price_indices:

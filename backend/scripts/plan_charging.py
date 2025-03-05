@@ -167,7 +167,7 @@ def get_house_data(house_id):
 def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
     """
     Získá předpověď solární výroby a upraví ji podle výkonu domu.
-    Posunuje hodiny dozadu o 1, protože předpovědi jsou pro následující hodinu.
+    Posunuje hodiny dozadu o 1, tedy data z hodiny 7 budou přiřazena k hodině 6.
     
     Args:
         house_power: Výkon solárních panelů v kWp
@@ -206,17 +206,14 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
         # Přepočítací faktory
         power_ratio = house_power / 20  # Základní predikce je na 20kWp
         
-        # Vytvoříme slovník s produkcí dle hodin pro dnešek
-        # Přímé mapování z hodin na hodiny, ale s posunem o 1 hodinu zpět
+        # Vytvoříme slovník s produkcí dle hodin pro dnešek s posunem o 1 hodinu zpět
         hour_production_today = {}
         
         for timestamp, wh in rows:
             db_hour = timestamp.hour
-            target_hour = max(0, db_hour - 1)  # Posun o 1 hodinu zpět, ale ne pod 0
-            
-            # Ukládáme hodnoty přímo do cílové hodiny (s posunem -1)
-            # Pokud máme více hodnot pro stejnou hodinu, bereme poslední
-            hour_production_today[target_hour] = wh
+            if db_hour > 0:  # Pro všechny hodiny kromě 0
+                # Posun o 1 hodinu zpět
+                hour_production_today[db_hour - 1] = wh
         
         # Vytvoříme pole solární produkce pro všechny hodiny v plánovacím horizontu
         if have_tomorrow_prices:
@@ -254,17 +251,14 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
             tomorrow_rows = cur.fetchall()
             logger.info(f"Načteno {len(tomorrow_rows)} záznamů predikce solární výroby pro zítřek")
             
-            # Vytvoříme slovník s produkcí dle hodin pro zítřek
-            # Přímé mapování z hodin na hodiny, ale s posunem o 1 hodinu zpět
+            # Vytvoříme slovník s produkcí dle hodin pro zítřek s posunem o 1 hodinu zpět
             hour_production_tomorrow = {}
             
             for timestamp, wh in tomorrow_rows:
                 db_hour = timestamp.hour
-                target_hour = max(0, db_hour - 1)  # Posun o 1 hodinu zpět, ale ne pod 0
-                
-                # Ukládáme hodnoty přímo do cílové hodiny (s posunem -1)
-                # Pokud máme více hodnot pro stejnou hodinu, bereme poslední
-                hour_production_tomorrow[target_hour] = wh
+                if db_hour > 0:  # Pro všechny hodiny kromě 0
+                    # Posun o 1 hodinu zpět
+                    hour_production_tomorrow[db_hour - 1] = wh
                         
             # Plnění dat pro zítřek
             for hour in range(24):

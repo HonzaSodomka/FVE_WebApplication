@@ -210,6 +210,7 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
         
         for timestamp, wh in rows:
             hour = timestamp.hour - 1
+            logger.info(f"{timestamp}, {hour}")
             
             # Poslední záznam, který není v celé hodině, přiřadíme k další hodině
             if timestamp.minute > 0 and hour < 23:

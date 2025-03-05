@@ -689,6 +689,38 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         for level in initial_levels:
             logger.info(f"Hodina {level['hour']}:00 - {level['level']:.2f} kWh ({level['level']/battery_capacity*100:.1f}%)")
         
+        # NOVÁ ČÁST - identifikace kritických hodin, kde baterie klesá pod high target level
+        high_category = "high"
+        high_target_level = battery_capacity * target_profile[high_category]
+        high_target_with_reserve = high_target_level * 1.1  # 10% rezerva
+        
+        logger.info(f"=== IDENTIFIKACE KRITICKÝCH HODIN ===")
+        logger.info(f"Minimální požadovaná hladina baterie (high target): {high_target_level:.2f} kWh ({target_profile[high_category]*100:.1f}%)")
+        logger.info(f"Minimální hladina s 10% rezervou: {high_target_with_reserve:.2f} kWh ({target_profile[high_category]*110:.1f}%)")
+        
+        critical_hours = []
+        
+        for i, level in enumerate(initial_levels):
+            if level['level'] < high_target_level:
+                energy_deficit = high_target_level - level['level']
+                critical_hours.append({
+                    'index': i,
+                    'hour': level['hour'],
+                    'date': level['date'],
+                    'level': level['level'],
+                    'target': high_target_level,
+                    'deficit': energy_deficit,
+                    'deficit_with_efficiency': energy_deficit / charging_efficiency
+                })
+                
+                logger.warning(f"KRITICKÁ HODINA: {level['date']} {level['hour']}:00 - Stav baterie: {level['level']:.2f} kWh, " +
+                             f"Minimální požadavek: {high_target_level:.2f} kWh, Deficit: {energy_deficit:.2f} kWh")
+        
+        if not critical_hours:
+            logger.info("Žádné kritické hodiny nalezeny - baterie neklesne pod minimální požadovanou úroveň.")
+        else:
+            logger.info(f"Nalezeno {len(critical_hours)} kritických hodin, kde baterie klesá pod minimální požadovanou úroveň.")
+        
         # Pro každou hodinu v pořadí od nejlevnější
         for hour_idx in sorted_price_indices:
             current_hour = price_data[hour_idx]
@@ -716,7 +748,6 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 
                 logger.info(f"Plánuji nabíjení pro hodinu {current_hour['hour']}:00")
                 
-                # Simulujeme plán s maximálním nabíjením v této hodině
                 # Simulujeme plán s maximálním nabíjením v této hodině
                 test_charging_plan = charging_plan.copy()
                 test_charging_plan[hour_idx] = max_hour_charging
@@ -786,6 +817,31 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         
         # Finální stav baterie po všech úpravách
         final_levels = simulate_battery_levels(charging_plan)
+        
+        # NOVÁ ČÁST - kontrola kritických hodin po optimalizaci
+        logger.info(f"=== KONTROLA KRITICKÝCH HODIN PO OPTIMALIZACI ===")
+        critical_hours_after = []
+        
+        for i, level in enumerate(final_levels):
+            if level['level'] < high_target_level:
+                energy_deficit = high_target_level - level['level']
+                critical_hours_after.append({
+                    'index': i,
+                    'hour': level['hour'],
+                    'date': level['date'],
+                    'level': level['level'],
+                    'target': high_target_level,
+                    'deficit': energy_deficit,
+                    'deficit_with_efficiency': energy_deficit / charging_efficiency
+                })
+                
+                logger.warning(f"PŘETRVÁVAJÍCÍ KRITICKÁ HODINA: {level['date']} {level['hour']}:00 - Stav baterie: {level['level']:.2f} kWh, " +
+                             f"Minimální požadavek: {high_target_level:.2f} kWh, Deficit: {energy_deficit:.2f} kWh")
+        
+        if not critical_hours_after:
+            logger.info("Po optimalizaci nebyly nalezeny žádné kritické hodiny.")
+        else:
+            logger.info(f"Po optimalizaci přetrvává {len(critical_hours_after)} kritických hodin, kde baterie klesá pod minimální požadovanou úroveň.")
         
         # Vytvoření finálního plánu
         final_plan = []

@@ -714,7 +714,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             if current_level < high_target_level:
                 # Máme kritickou hodinu - potřebujeme dobít před touto hodinou
                 target_hour = current_levels[hour_idx]
-                energy_deficit = high_target_level - current_level
+                energy_deficit = high_target_with_reserve - current_level
                 
                 logger.info(f"KRITICKÁ HODINA NALEZENA: {target_hour['date']} {target_hour['hour']}:00")
                 logger.info(f"Stav baterie: {current_level:.2f} kWh, Minimální požadavek: {high_target_level:.2f} kWh")
@@ -806,10 +806,10 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 current_levels = simulate_battery_levels(charging_plan)
                 current_level = current_levels[hour_idx]['level']
                 
-                if current_level >= high_target_level:
+                if current_level >= high_target_with_reserve:
                     logger.info(f"KRITICKÁ HODINA VYŘEŠENA: Nový stav baterie {current_level:.2f} kWh >= {high_target_level:.2f} kWh")
                 else:
-                    remaining_deficit = (high_target_level - current_level) / charging_efficiency
+                    remaining_deficit = (high_target_with_reserve - current_level) / charging_efficiency
                     logger.warning(f"NEPODAŘILO SE ZCELA VYŘEŠIT KRITICKOU HODINU: Stav baterie {current_level:.2f} kWh < {high_target_level:.2f} kWh")
                     logger.warning(f"Zbývající deficit: {remaining_deficit:.2f} kWh - nelze vyřešit pomocí dostupných hodin")
         
@@ -932,13 +932,13 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         
         for i, level in enumerate(final_levels):
             if level['level'] < high_target_level:
-                energy_deficit = high_target_level - level['level']
+                energy_deficit = high_target_with_reserve - level['level']
                 critical_hours_after.append({
                     'index': i,
                     'hour': level['hour'],
                     'date': level['date'],
                     'level': level['level'],
-                    'target': high_target_level,
+                    'target': high_target_with_reserve,
                     'deficit': energy_deficit,
                     'deficit_with_efficiency': energy_deficit / charging_efficiency
                 })

@@ -209,7 +209,7 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
         hour_production_today = {}
         
         for timestamp, wh in rows:
-            hour = timestamp.hour
+            hour = timestamp.hour - 1
             
             # Poslední záznam, který není v celé hodině, přiřadíme k další hodině
             if timestamp.minute > 0 and hour < 23:
@@ -236,7 +236,7 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
             solar_kwh = hour_production_today.get(hour, 0) * power_ratio / 1000
             solar_data.append({
                 'date': today,
-                'hour': hour-1,
+                'hour': hour,
                 'solar_kwh': solar_kwh,
                 'index': index
             })
@@ -256,7 +256,7 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
             hour_production_tomorrow = {}
             
             for timestamp, wh in tomorrow_rows:
-                hour = timestamp.hour
+                hour = timestamp.hour - 1
                 
                 if timestamp.minute > 0 and hour < 23:
                     next_hour = hour + 1
@@ -271,7 +271,7 @@ def get_solar_prediction(house_power, current_hour, have_tomorrow_prices=False):
                 solar_kwh = hour_production_tomorrow.get(hour, 0) * power_ratio / 1000
                 solar_data.append({
                     'date': tomorrow,
-                    'hour': hour-1,
+                    'hour': hour,
                     'solar_kwh': solar_kwh,
                     'index': index
                 })

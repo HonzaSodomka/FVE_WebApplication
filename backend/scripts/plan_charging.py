@@ -1127,7 +1127,7 @@ def plan_charging_for_house(house_id):
         
         # Určíme, zda máme k dispozici data o cenách elektřiny na zítřek
         # Pokud je aktuální hodina >= 17, máme data na zítřek
-        have_tomorrow_prices = current_time.hour >= 17
+        have_tomorrow_prices = next_hour >= 17
         
         if have_tomorrow_prices:
             logger.info(f"Aktuální čas: {current_time.strftime('%H:%M')} - Máme k dispozici ceny na zítřek")

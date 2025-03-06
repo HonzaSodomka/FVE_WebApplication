@@ -90,7 +90,7 @@ def simulate_minute_consumption():
             FROM api_house h
             JOIN api_appliance a ON (
                 CASE 
-                    WHEN h.id IN (999, 9999) THEN 9  -- Pro testovací domy použij spotřebiče z domu 9
+                    WHEN h.id IN (999, 9999, 99999) THEN 9
                     ELSE h.id 
                 END
             ) = a.house_id

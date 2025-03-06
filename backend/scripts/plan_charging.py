@@ -12,7 +12,7 @@ logging.basicConfig(
 logger = logging.getLogger('api')
 
 def get_active_houses():
-    """Získá seznam ID aktivních domů"""
+    """Získá seznam ID aktivních domů, kromě domu s ID 99999"""
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -25,7 +25,7 @@ def get_active_houses():
         cur.execute("""
             SELECT id 
             FROM api_house 
-            WHERE is_active = true
+            WHERE is_active = true AND id != 99999
         """)
         
         active_houses = [row[0] for row in cur.fetchall()]

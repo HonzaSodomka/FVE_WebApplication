@@ -704,7 +704,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
         logger.info(f"Minimální požadovaná hladina baterie (high target): {high_target_level:.2f} kWh ({target_profile[high_category]*100:.1f}%)")
         logger.info(f"Minimální hladina s 10% rezervou: {high_target_with_reserve:.2f} kWh ({target_profile[high_category]*110:.1f}%)")
         
-        # Procházíme hodiny chronologicky a řešíme kritické hodiny
+        # V části kde řešíme kritické hodiny
         for hour_idx in range(n_hours):
             # Simulujeme stav baterie s aktuálním plánem nabíjení
             current_levels = simulate_battery_levels(charging_plan)
@@ -714,7 +714,22 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             if current_level < high_target_level:
                 # Máme kritickou hodinu - potřebujeme dobít před touto hodinou
                 target_hour = current_levels[hour_idx]
-                energy_deficit = high_target_with_reserve - current_level
+                
+                # Zjistíme kategorii ceny pro hodinu, kterou teď řešíme
+                hour_price_category = price_data[hour_idx]['price_category']
+                
+                # Dynamicky určíme rezervu podle kategorie ceny
+                if hour_price_category in ['extremely_low', 'low']:
+                    # 25% rezerva pro levné hodiny
+                    target_reserve_factor = 1.25
+                    logger.info(f"Pro kritickou hodinu {target_hour['date']} {target_hour['hour']}:00 použita zvýšená rezerva 25% (levná kategorie: {hour_price_category})")
+                else:
+                    # Standardní 10% rezerva
+                    target_reserve_factor = 1.10
+                    logger.info(f"Pro kritickou hodinu {target_hour['date']} {target_hour['hour']}:00 použita standardní rezerva 10% (kategorie: {hour_price_category})")
+                
+                # Vypočteme energetický deficit s dynamickou rezervou
+                energy_deficit = (high_target_level * target_reserve_factor) - current_level
                 
                 logger.info(f"KRITICKÁ HODINA NALEZENA: {target_hour['date']} {target_hour['hour']}:00")
                 logger.info(f"Stav baterie: {current_level:.2f} kWh, Minimální požadavek: {high_target_level:.2f} kWh")

@@ -88,7 +88,12 @@ def simulate_minute_consumption():
                 a.remaining_minutes_list,
                 a.planned_starts
             FROM api_house h
-            JOIN api_appliance a ON h.id = a.house_id
+            JOIN api_appliance a ON (
+                CASE 
+                    WHEN h.id IN (999, 9999) THEN 9  -- Pro testovací domy použij spotřebiče z domu 9
+                    ELSE h.id 
+                END
+            ) = a.house_id
             WHERE h.is_active = true
         """)
         rows = cur.fetchall()

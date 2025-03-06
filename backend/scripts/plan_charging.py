@@ -310,6 +310,9 @@ def get_consumption_prediction(house_id, current_hour, have_tomorrow_prices=Fals
     Returns:
         Seznam objektů s predikcí spotřeby pro každou hodinu v plánovacím horizontu
     """
+    # Pokud je dům s ID 999 nebo 9999, použij data z domu s ID 9
+    consumption_house_id = 9 if house_id in [999, 9999] else house_id
+    
     try:
         conn = psycopg2.connect(
             dbname="fve_db",
@@ -361,7 +364,7 @@ def get_consumption_prediction(house_id, current_hour, have_tomorrow_prices=Fals
                 hour,
                 CASE WHEN day_of_week IN (0, 6) THEN 'weekend' ELSE 'weekday' END
             ORDER BY day_type, hour
-        """, [house_id, start_date])
+        """, [consumption_house_id, start_date])  # Zde použijeme upravené ID domu
         
         rows = cur.fetchall()
         

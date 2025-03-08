@@ -210,48 +210,49 @@ export default function Page() {
                 </p>
               </div>
             </div>
-            <ApplianceDialog
-              houseId={parseInt(params.id as string)}
-              onSuccess={fetchData}
-            />
+            <div className="flex items-center gap-4">
+              <DatePicker date={date} onSelect={setDate} />
+              <ApplianceDialog
+                houseId={parseInt(params.id as string)}
+                onSuccess={fetchData}
+              />
+            </div>
           </div>
         </div>
 
-        <div className="grid gap-6 lg:grid-cols-2">
-          {/* Parametry domu */}
-          <Card className="bg-white shadow-sm border border-gray-100">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <div className="flex items-center gap-4">
+        <div className="grid gap-6 lg:grid-cols-12">
+          {/* Levý sloupec */}
+          <div className="col-span-12 lg:col-span-5 space-y-6">
+            {/* Parametry domu */}
+            <Card className="bg-white shadow-sm border border-gray-100">
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-xl font-semibold text-gray-900">
                   Parametry domu
                 </CardTitle>
-                <DatePicker date={date} onSelect={setDate} />
-              </div>
-              <div className="flex gap-2">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className={`${
-                    house.is_active
-                      ? "text-green-500 hover:text-green-700 hover:bg-green-50"
-                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                  }`}
-                  onClick={toggleSimulation}
-                  disabled={isTogglingSimulation}
-                >
-                  {isTogglingSimulation ? (
-                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                  ) : (
-                    <Power className="h-4 w-4" />
-                  )}
-                </Button>
-                <HouseDialog house={house} onSuccess={fetchData} />
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="grid grid-cols-2 gap-4">
+                <div className="flex gap-2">
+                  <Button
+                    variant="ghost"
+                    size="icon"
+                    className={`${
+                      house.is_active
+                        ? "text-green-500 hover:text-green-700 hover:bg-green-50"
+                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    }`}
+                    onClick={toggleSimulation}
+                    disabled={isTogglingSimulation}
+                  >
+                    {isTogglingSimulation ? (
+                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                    ) : (
+                      <Power className="h-4 w-4" />
+                    )}
+                  </Button>
+                  <HouseDialog house={house} onSuccess={fetchData} />
+                </div>
+              </CardHeader>
+              <CardContent>
                 {/* Baterie */}
-                <div className="col-span-2 bg-blue-50 rounded-lg p-4">
+                <div className="bg-blue-50 rounded-lg p-4 mb-4">
                   <h3 className="text-sm font-medium text-blue-900 mb-3">
                     Stav baterie
                   </h3>
@@ -296,149 +297,149 @@ export default function Page() {
                   </div>
                 </div>
 
-                {/* Denní statistiky s grafem plánovaného nabíjení */}
-                <div className="col-span-2 space-y-4">
-                  {/* Denní statistiky */}
-                  <div className="bg-green-50 rounded-lg p-4">
-                    <h3 className="text-sm font-medium text-green-900 mb-3">
-                      Denní statistiky {format(date, "dd.MM.yyyy")}
+                {/* Denní statistiky */}
+                <div className="bg-green-50 rounded-lg p-4 mb-4">
+                  <h3 className="text-sm font-medium text-green-900 mb-3">
+                    Denní statistiky {format(date, "dd.MM.yyyy")}
+                  </h3>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm flex justify-between">
+                        <span className="text-green-600">Spotřeba:</span>
+                        <span className="font-medium text-green-900">
+                          {dailyStats.consumption_kwh.toFixed(2)} kWh
+                        </span>
+                      </p>
+                      <p className="text-sm flex justify-between">
+                        <span className="text-green-600">
+                          Nabito ze solárů:
+                        </span>
+                        <span className="font-medium text-green-900">
+                          {dailyStats.solar_charged_kwh.toFixed(2)} kWh
+                        </span>
+                      </p>
+                    </div>
+                    <div>
+                      <p className="text-sm flex justify-between">
+                        <span className="text-green-600">Nabito ze sítě:</span>
+                        <span className="font-medium text-green-900">
+                          {dailyStats.grid_charged_kwh.toFixed(2)} kWh
+                        </span>
+                      </p>
+                      <p className="text-sm flex justify-between">
+                        <span className="text-green-600">Cena nabíjení:</span>
+                        <span className="font-medium text-green-900">
+                          {dailyStats.grid_charged_cost.toFixed(2)} Kč
+                        </span>
+                      </p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 gap-4">
+                  {/* Výkonové parametry */}
+                  <div className="p-4 bg-gray-50 rounded-lg">
+                    <h3 className="text-sm font-medium text-gray-900 mb-2">
+                      Výkonové parametry
                     </h3>
-                    <div className="grid grid-cols-2 gap-4">
-                      <div>
-                        <p className="text-sm flex justify-between">
-                          <span className="text-green-600">Spotřeba:</span>
-                          <span className="font-medium text-green-900">
-                            {dailyStats.consumption_kwh.toFixed(2)} kWh
-                          </span>
-                        </p>
-                        <p className="text-sm flex justify-between">
-                          <span className="text-green-600">
-                            Nabito ze solárů:
-                          </span>
-                          <span className="font-medium text-green-900">
-                            {dailyStats.solar_charged_kwh.toFixed(2)} kWh
-                          </span>
-                        </p>
-                      </div>
-                      <div>
-                        <p className="text-sm flex justify-between">
-                          <span className="text-green-600">Nabito ze sítě:</span>
-                          <span className="font-medium text-green-900">
-                            {dailyStats.grid_charged_kwh.toFixed(2)} kWh
-                          </span>
-                        </p>
-                        <p className="text-sm flex justify-between">
-                          <span className="text-green-600">Cena nabíjení:</span>
-                          <span className="font-medium text-green-900">
-                            {dailyStats.grid_charged_cost.toFixed(2)} Kč
-                          </span>
-                        </p>
-                      </div>
+                    <div className="space-y-2">
+                      <p className="text-sm flex justify-between">
+                        <span className="text-gray-600">Nabíjecí výkon:</span>
+                        <span className="font-medium text-gray-900">
+                          {house.max_charging_power} kW
+                        </span>
+                      </p>
+                      <p className="text-sm flex justify-between">
+                        <span className="text-gray-600">Vybíjecí výkon:</span>
+                        <span className="font-medium text-gray-900">
+                          {house.max_discharging_power} kW
+                        </span>
+                      </p>
                     </div>
                   </div>
 
-                  {/* Graf plánovaného nabíjení - PŘESUNUTO SEM */}
-                  <ChargingScheduleChart
-                    houseId={parseInt(params.id as string)}
-                    date={date}
-                  />
-                </div>
-
-                {/* Výkonové parametry */}
-                <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="text-sm font-medium text-gray-900">
-                    Výkonové parametry
-                  </h3>
-                  <div className="space-y-2">
-                    <p className="text-sm flex justify-between">
-                      <span className="text-gray-600">Nabíjecí výkon:</span>
-                      <span className="font-medium text-gray-900">
-                        {house.max_charging_power} kW
-                      </span>
-                    </p>
-                    <p className="text-sm flex justify-between">
-                      <span className="text-gray-600">Vybíjecí výkon:</span>
-                      <span className="font-medium text-gray-900">
-                        {house.max_discharging_power} kW
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Účinnost */}
-                <div className="space-y-3 p-4 bg-gray-50 rounded-lg">
-                  <h3 className="text-sm font-medium text-gray-900">
-                    Účinnost
-                  </h3>
-                  <div className="space-y-2">
-                    <p className="text-sm flex justify-between">
-                      <span className="text-gray-600">Nabíjení:</span>
-                      <span className="font-medium text-gray-900">
-                        {house.charging_efficiency}%
-                      </span>
-                    </p>
-                    <p className="text-sm flex justify-between">
-                      <span className="text-gray-600">Vybíjení:</span>
-                      <span className="font-medium text-gray-900">
-                        {house.discharging_efficiency}%
-                      </span>
-                    </p>
-                  </div>
-                </div>
-
-                {/* Risk level a status */}
-                <div className="col-span-2 flex gap-4">
-                  <div className="flex-1 bg-gray-50 rounded-lg p-4">
+                  {/* Účinnost */}
+                  <div className="p-4 bg-gray-50 rounded-lg">
                     <h3 className="text-sm font-medium text-gray-900 mb-2">
-                      Úroveň rizika
+                      Účinnost
                     </h3>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        {
-                          LOW: "bg-green-100 text-green-800",
-                          MEDIUM: "bg-yellow-100 text-yellow-800",
-                          HIGH: "bg-red-100 text-red-800",
-                        }[house.risk_level]
-                      }`}
-                    >
-                      {
-                        {
-                          LOW: "Nízká - bezpečnější nabíjení",
-                          MEDIUM: "Střední - vyvážený přístup",
-                          HIGH: "Vysoká - agresivní optimalizace",
-                        }[house.risk_level]
-                      }
-                    </span>
+                    <div className="space-y-2">
+                      <p className="text-sm flex justify-between">
+                        <span className="text-gray-600">Nabíjení:</span>
+                        <span className="font-medium text-gray-900">
+                          {house.charging_efficiency}%
+                        </span>
+                      </p>
+                      <p className="text-sm flex justify-between">
+                        <span className="text-gray-600">Vybíjení:</span>
+                        <span className="font-medium text-gray-900">
+                          {house.discharging_efficiency}%
+                        </span>
+                      </p>
+                    </div>
                   </div>
-                  <div className="flex-1 bg-gray-50 rounded-lg p-4">
-                    <h3 className="text-sm font-medium text-gray-900 mb-2">
-                      Status simulace
-                    </h3>
-                    <span
-                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                        house.is_active
-                          ? "bg-green-100 text-green-800"
-                          : "bg-gray-100 text-gray-800"
-                      }`}
-                    >
-                      {house.is_active ? "Simulace běží" : "Simulace zastavena"}
-                    </span>
+
+                  {/* Risk level a status */}
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="text-sm font-medium text-gray-900 mb-2">
+                        Úroveň rizika
+                      </h3>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          {
+                            LOW: "bg-green-100 text-green-800",
+                            MEDIUM: "bg-yellow-100 text-yellow-800",
+                            HIGH: "bg-red-100 text-red-800",
+                          }[house.risk_level]
+                        }`}
+                      >
+                        {
+                          {
+                            LOW: "Nízká - bezpečnější nabíjení",
+                            MEDIUM: "Střední - vyvážený přístup",
+                            HIGH: "Vysoká - agresivní optimalizace",
+                          }[house.risk_level]
+                        }
+                      </span>
+                    </div>
+                    <div className="bg-gray-50 rounded-lg p-4">
+                      <h3 className="text-sm font-medium text-gray-900 mb-2">
+                        Status simulace
+                      </h3>
+                      <span
+                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                          house.is_active
+                            ? "bg-green-100 text-green-800"
+                            : "bg-gray-100 text-gray-800"
+                        }`}
+                      >
+                        {house.is_active ? "Simulace běží" : "Simulace zastavena"}
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
-            </CardContent>
-          </Card>
+              </CardContent>
+            </Card>
+            
+            {/* Spotřebiče */}
+            <ApplianceList 
+              appliances={appliances}
+              houseId={parseInt(params.id as string)}
+              onSuccess={fetchData}
+              onDelete={handleDeleteAppliance}
+            />
+          </div>
 
-          {/* Spotřebiče */}
-          <ApplianceList 
-            appliances={appliances}
-            houseId={parseInt(params.id as string)}
-            onSuccess={fetchData}
-            onDelete={handleDeleteAppliance}
-          />
+          {/* Pravý sloupec - grafy */}
+          <div className="col-span-12 lg:col-span-7 space-y-6">
+            {/* Plánované nabíjení */}
+            <ChargingScheduleChart
+              houseId={parseInt(params.id as string)}
+              date={date}
+            />
 
-          {/* Graf spotřeby */}
-          <div className="col-span-2">
+            {/* Graf spotřeby */}
             <Card className="bg-white shadow-sm border border-gray-100">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
                 <CardTitle className="text-xl font-semibold text-gray-900">

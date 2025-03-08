@@ -25,6 +25,11 @@ interface ScheduleData {
   time: string;
 }
 
+interface ScheduleItem {
+  hour: number;
+  planned_charging_kwh: string | number;
+}
+
 interface PriceData {
   hour: number;
   price_czk: number;
@@ -84,9 +89,9 @@ export default function ChargingScheduleChart({ houseId, date }: ChargingSchedul
         }
         
         // Formátování dat pro graf
-        const formattedData = data.schedule.map((item: any) => ({
+        const formattedData = data.schedule.map((item: ScheduleItem) => ({
           hour: item.hour,
-          planned_charging_kwh: parseFloat(item.planned_charging_kwh),
+          planned_charging_kwh: parseFloat(item.planned_charging_kwh.toString()),
           time: `${String(item.hour).padStart(2, "0")}:00`,
         }));
         
@@ -117,7 +122,7 @@ export default function ChargingScheduleChart({ houseId, date }: ChargingSchedul
   }, [houseId, date]);
 
   // Custom tooltip pro graf
-  const CustomTooltip = ({ active, payload, label }: TooltipProps<number, string>) => {
+  const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
     if (active && payload && payload.length) {
       const hourData = payload[0].payload as ScheduleData;
       const priceInfo = priceData.find(p => p.hour === hourData.hour);

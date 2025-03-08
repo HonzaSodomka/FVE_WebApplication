@@ -55,7 +55,7 @@ export default function Page() {
     grid_charged_cost: 0,
   });
 
-  const fetchDailyStats = async () => {
+  const fetchDailyStats = useCallback(async () => {
     try {
       const [consumptionResponse, chargingResponse] = await Promise.all([
         fetch(
@@ -90,7 +90,7 @@ export default function Page() {
     } catch (err) {
       console.error("Failed to fetch daily stats:", err);
     }
-  };
+  }, [params.id, date]);
 
   const fetchData = useCallback(async () => {
     try {
@@ -178,7 +178,7 @@ export default function Page() {
       fetchData();
       fetchDailyStats();
     }
-  }, [params.id, date, fetchData]);
+  }, [params.id, date, fetchData, fetchDailyStats]);
 
   if (isLoading) return <div className="text-center p-4">Načítání...</div>;
   if (error || !house)

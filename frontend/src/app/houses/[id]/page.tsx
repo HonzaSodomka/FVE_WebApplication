@@ -296,43 +296,52 @@ export default function Page() {
                   </div>
                 </div>
 
-                {/* Denní statistiky */}
-                <div className="col-span-2 bg-green-50 rounded-lg p-4">
-                  <h3 className="text-sm font-medium text-green-900 mb-3">
-                    Denní statistiky {format(date, "dd.MM.yyyy")}
-                  </h3>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div>
-                      <p className="text-sm flex justify-between">
-                        <span className="text-green-600">Spotřeba:</span>
-                        <span className="font-medium text-green-900">
-                          {dailyStats.consumption_kwh.toFixed(2)} kWh
-                        </span>
-                      </p>
-                      <p className="text-sm flex justify-between">
-                        <span className="text-green-600">
-                          Nabito ze solárů:
-                        </span>
-                        <span className="font-medium text-green-900">
-                          {dailyStats.solar_charged_kwh.toFixed(2)} kWh
-                        </span>
-                      </p>
-                    </div>
-                    <div>
-                      <p className="text-sm flex justify-between">
-                        <span className="text-green-600">Nabito ze sítě:</span>
-                        <span className="font-medium text-green-900">
-                          {dailyStats.grid_charged_kwh.toFixed(2)} kWh
-                        </span>
-                      </p>
-                      <p className="text-sm flex justify-between">
-                        <span className="text-green-600">Cena nabíjení:</span>
-                        <span className="font-medium text-green-900">
-                          {dailyStats.grid_charged_cost.toFixed(2)} Kč
-                        </span>
-                      </p>
+                {/* Denní statistiky s grafem plánovaného nabíjení */}
+                <div className="col-span-2 space-y-4">
+                  {/* Denní statistiky */}
+                  <div className="bg-green-50 rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-green-900 mb-3">
+                      Denní statistiky {format(date, "dd.MM.yyyy")}
+                    </h3>
+                    <div className="grid grid-cols-2 gap-4">
+                      <div>
+                        <p className="text-sm flex justify-between">
+                          <span className="text-green-600">Spotřeba:</span>
+                          <span className="font-medium text-green-900">
+                            {dailyStats.consumption_kwh.toFixed(2)} kWh
+                          </span>
+                        </p>
+                        <p className="text-sm flex justify-between">
+                          <span className="text-green-600">
+                            Nabito ze solárů:
+                          </span>
+                          <span className="font-medium text-green-900">
+                            {dailyStats.solar_charged_kwh.toFixed(2)} kWh
+                          </span>
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-sm flex justify-between">
+                          <span className="text-green-600">Nabito ze sítě:</span>
+                          <span className="font-medium text-green-900">
+                            {dailyStats.grid_charged_kwh.toFixed(2)} kWh
+                          </span>
+                        </p>
+                        <p className="text-sm flex justify-between">
+                          <span className="text-green-600">Cena nabíjení:</span>
+                          <span className="font-medium text-green-900">
+                            {dailyStats.grid_charged_cost.toFixed(2)} Kč
+                          </span>
+                        </p>
+                      </div>
                     </div>
                   </div>
+
+                  {/* Graf plánovaného nabíjení - PŘESUNUTO SEM */}
+                  <ChargingScheduleChart
+                    houseId={parseInt(params.id as string)}
+                    date={date}
+                  />
                 </div>
 
                 {/* Výkonové parametry */}
@@ -428,7 +437,7 @@ export default function Page() {
             onDelete={handleDeleteAppliance}
           />
 
-          {/* Grafy */}
+          {/* Graf spotřeby */}
           <div className="col-span-2">
             <Card className="bg-white shadow-sm border border-gray-100">
               <CardHeader className="flex flex-row items-center justify-between space-y-0">
@@ -443,14 +452,6 @@ export default function Page() {
                 />
               </CardContent>
             </Card>
-          </div>
-
-          {/* Graf plánovaného nabíjení */}
-          <div className="col-span-2 mt-6">
-            <ChargingScheduleChart
-              houseId={parseInt(params.id as string)}
-              date={date}
-            />
           </div>
         </div>
       </div>

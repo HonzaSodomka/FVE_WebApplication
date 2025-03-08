@@ -207,10 +207,6 @@ export default function ChargingScheduleDisplay({ houseId, date }: ChargingSched
           </div>
         </>
       )}
-      
-      <div className="mt-4 text-sm text-gray-500 bg-gray-50 p-4 rounded-lg">
-        <p>Zobrazeno plánované nabíjení baterie ze sítě na základě optimalizace podle spotových cen elektřiny. Nabíjení ze solárních panelů není zahrnuto.</p>
-      </div>
     </div>
   );
 }

@@ -193,7 +193,7 @@ export default function Page() {
       <div className="max-w-7xl mx-auto">
         {/* Header sekce */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 mb-6">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-wrap justify-between items-center gap-4">
             <div className="flex items-center gap-4">
               <Link href="/houses">
                 <Button variant="outline" size="icon">
@@ -212,10 +212,31 @@ export default function Page() {
             </div>
             <div className="flex items-center gap-4">
               <DatePicker date={date} onSelect={setDate} />
-              <ApplianceDialog
-                houseId={parseInt(params.id as string)}
-                onSuccess={fetchData}
-              />
+              <div className="flex gap-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className={`${
+                    house.is_active
+                      ? "text-green-500 hover:text-green-700 hover:bg-green-50"
+                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                  }`}
+                  onClick={toggleSimulation}
+                  disabled={isTogglingSimulation}
+                  title={house.is_active ? "Zastavit simulaci" : "Spustit simulaci"}
+                >
+                  {isTogglingSimulation ? (
+                    <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                  ) : (
+                    <Power className="h-4 w-4" />
+                  )}
+                </Button>
+                <HouseDialog house={house} onSuccess={fetchData} />
+                <ApplianceDialog
+                  houseId={parseInt(params.id as string)}
+                  onSuccess={fetchData}
+                />
+              </div>
             </div>
           </div>
         </div>
@@ -225,30 +246,10 @@ export default function Page() {
           <div className="col-span-12 lg:col-span-5 space-y-6">
             {/* Parametry domu */}
             <Card className="bg-white shadow-sm border border-gray-100">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+              <CardHeader className="pb-2">
                 <CardTitle className="text-xl font-semibold text-gray-900">
                   Parametry domu
                 </CardTitle>
-                <div className="flex gap-2">
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className={`${
-                      house.is_active
-                        ? "text-green-500 hover:text-green-700 hover:bg-green-50"
-                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
-                    }`}
-                    onClick={toggleSimulation}
-                    disabled={isTogglingSimulation}
-                  >
-                    {isTogglingSimulation ? (
-                      <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-                    ) : (
-                      <Power className="h-4 w-4" />
-                    )}
-                  </Button>
-                  <HouseDialog house={house} onSuccess={fetchData} />
-                </div>
               </CardHeader>
               <CardContent>
                 {/* Baterie */}
@@ -336,7 +337,7 @@ export default function Page() {
                   </div>
                 </div>
 
-                <div className="grid grid-cols-1 gap-4">
+                <div className="grid grid-cols-2 gap-4">
                   {/* Výkonové parametry */}
                   <div className="p-4 bg-gray-50 rounded-lg">
                     <h3 className="text-sm font-medium text-gray-900 mb-2">
@@ -380,43 +381,41 @@ export default function Page() {
                   </div>
 
                   {/* Risk level a status */}
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h3 className="text-sm font-medium text-gray-900 mb-2">
-                        Úroveň rizika
-                      </h3>
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          {
-                            LOW: "bg-green-100 text-green-800",
-                            MEDIUM: "bg-yellow-100 text-yellow-800",
-                            HIGH: "bg-red-100 text-red-800",
-                          }[house.risk_level]
-                        }`}
-                      >
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-gray-900 mb-2">
+                      Úroveň rizika
+                    </h3>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                         {
-                          {
-                            LOW: "Nízká - bezpečnější nabíjení",
-                            MEDIUM: "Střední - vyvážený přístup",
-                            HIGH: "Vysoká - agresivní optimalizace",
-                          }[house.risk_level]
-                        }
-                      </span>
-                    </div>
-                    <div className="bg-gray-50 rounded-lg p-4">
-                      <h3 className="text-sm font-medium text-gray-900 mb-2">
-                        Status simulace
-                      </h3>
-                      <span
-                        className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                          house.is_active
-                            ? "bg-green-100 text-green-800"
-                            : "bg-gray-100 text-gray-800"
-                        }`}
-                      >
-                        {house.is_active ? "Simulace běží" : "Simulace zastavena"}
-                      </span>
-                    </div>
+                          LOW: "bg-green-100 text-green-800",
+                          MEDIUM: "bg-yellow-100 text-yellow-800",
+                          HIGH: "bg-red-100 text-red-800",
+                        }[house.risk_level]
+                      }`}
+                    >
+                      {
+                        {
+                          LOW: "Nízká - bezpečnější nabíjení",
+                          MEDIUM: "Střední - vyvážený přístup",
+                          HIGH: "Vysoká - agresivní optimalizace",
+                        }[house.risk_level]
+                      }
+                    </span>
+                  </div>
+                  <div className="bg-gray-50 rounded-lg p-4">
+                    <h3 className="text-sm font-medium text-gray-900 mb-2">
+                      Status simulace
+                    </h3>
+                    <span
+                      className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                        house.is_active
+                          ? "bg-green-100 text-green-800"
+                          : "bg-gray-100 text-gray-800"
+                      }`}
+                    >
+                      {house.is_active ? "Simulace běží" : "Simulace zastavena"}
+                    </span>
                   </div>
                 </div>
               </CardContent>
@@ -440,19 +439,10 @@ export default function Page() {
             />
 
             {/* Graf spotřeby */}
-            <Card className="bg-white shadow-sm border border-gray-100">
-              <CardHeader className="flex flex-row items-center justify-between space-y-0">
-                <CardTitle className="text-xl font-semibold text-gray-900">
-                  Spotřeba energie
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <ConsumptionChart
-                  houseId={parseInt(params.id as string)}
-                  date={date}
-                />
-              </CardContent>
-            </Card>
+            <ConsumptionChart
+              houseId={parseInt(params.id as string)}
+              date={date}
+            />
           </div>
         </div>
       </div>

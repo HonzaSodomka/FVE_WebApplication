@@ -1,15 +1,4 @@
 import React, { useState, useEffect } from 'react';
-import {
-  BarChart,
-  Bar,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-  TooltipProps
-} from 'recharts';
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -17,12 +6,6 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 interface ChargingScheduleProps {
   houseId: number;
   date: Date;
-}
-
-interface ScheduleData {
-  hour: number;
-  planned_charging_kwh: number;
-  time: string;
 }
 
 interface ScheduleItem {
@@ -53,12 +36,13 @@ function formatDisplayDate(date: Date): string {
   return `${day}. ${month}. ${year}`;
 }
 
-export default function ChargingScheduleChart({ houseId, date }: ChargingScheduleProps) {
-  const [scheduleData, setScheduleData] = useState<ScheduleData[]>([]);
+export default function ChargingScheduleDisplay({ houseId, date }: ChargingScheduleProps) {
+  const [scheduleData, setScheduleData] = useState<ScheduleItem[]>([]);
   const [priceData, setPriceData] = useState<PriceData[]>([]);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [totalCharging, setTotalCharging] = useState<number>(0);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -88,14 +72,25 @@ export default function ChargingScheduleChart({ houseId, date }: ChargingSchedul
           setMessage(data.message);
         }
         
-        // Formátování dat pro graf
-        const formattedData = data.schedule.map((item: ScheduleItem) => ({
-          hour: item.hour,
-          planned_charging_kwh: parseFloat(item.planned_charging_kwh.toString()),
-          time: `${String(item.hour).padStart(2, "0")}:00`,
-        }));
+        // Zpracování dat a seřazení podle hodiny
+        const processedData = data.schedule
+          .map((item: ScheduleItem) => ({
+            hour: item.hour,
+            planned_charging_kwh: parseFloat(typeof item.planned_charging_kwh === 'string' ? 
+              item.planned_charging_kwh : 
+              item.planned_charging_kwh.toString()
+            ),
+          }))
+          .sort((a: ScheduleItem, b: ScheduleItem) => a.hour - b.hour);
         
-        setScheduleData(formattedData);
+        setScheduleData(processedData);
+        
+        // Výpočet celkového plánovaného nabíjení
+        const total = processedData.reduce(
+          (sum: number, item: ScheduleItem) => sum + (item.planned_charging_kwh as number), 
+          0
+        );
+        setTotalCharging(total);
         
         // Načtení dat o cenách pro kontext
         const priceResponse = await fetch(
@@ -121,32 +116,14 @@ export default function ChargingScheduleChart({ houseId, date }: ChargingSchedul
     fetchData();
   }, [houseId, date]);
 
-  // Custom tooltip pro graf
-  const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
-    if (active && payload && payload.length) {
-      const hourData = payload[0].payload as ScheduleData;
-      const priceInfo = priceData.find(p => p.hour === hourData.hour);
-      
-      return (
-        <div className="bg-white p-3 border rounded-lg shadow-lg">
-          <p className="font-bold">{hourData.time}</p>
-          <p>
-            Plánované nabíjení: {hourData.planned_charging_kwh.toFixed(2)} kWh
-          </p>
-          {priceInfo && (
-            <>
-              <p>Cena: {(priceInfo.price_czk / 1000).toFixed(2)} Kč/kWh</p>
-              <p>Kategorie: {
-                priceInfo.level === "low" ? "Nízká" :
-                priceInfo.level === "medium" ? "Střední" :
-                priceInfo.level === "high" ? "Vysoká" : "Neznámá"
-              }</p>
-            </>
-          )}
-        </div>
-      );
-    }
-    return null;
+  // Funkce pro získání informací o ceně pro hodinu
+  const getPriceInfo = (hour: number) => {
+    const price = priceData.find(p => p.hour === hour);
+    if (!price) return null;
+    
+    return {
+      priceValue: (price.price_czk / 1000).toFixed(2)
+    };
   };
 
   if (isLoading) {
@@ -161,25 +138,10 @@ export default function ChargingScheduleChart({ houseId, date }: ChargingSchedul
     );
   }
 
-  // Zobrazení informativní zprávy, pokud není plán nabíjení
-  if (scheduleData.length === 0) {
-    return (
-      <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
-        <p className="text-gray-600">{message || "Pro tento den není naplánováno žádné nabíjení ze sítě."}</p>
-      </div>
-    );
-  }
-
-  // Výpočet celkového plánovaného nabíjení
-  const totalPlannedCharging = scheduleData.reduce(
-    (sum, item) => sum + item.planned_charging_kwh, 
-    0
-  );
-
   return (
     <div className="space-y-4 bg-white p-6 rounded-xl shadow-lg border border-gray-200">
       <div className="flex justify-between items-center">
-        <h2 className="text-2xl font-bold text-gray-800 mb-4 flex items-center">
+        <h2 className="text-xl font-bold text-gray-800 mb-1 flex items-center">
           <svg
             className="w-6 h-6 mr-2 text-blue-500"
             fill="none"
@@ -201,47 +163,53 @@ export default function ChargingScheduleChart({ houseId, date }: ChargingSchedul
         </span>
       </div>
 
-      <div className="text-center mb-4">
-        <p className="text-sm text-gray-500">Celkové plánované nabíjení</p>
-        <p className="text-xl font-bold text-blue-600">
-          {totalPlannedCharging.toFixed(2)} kWh
-        </p>
-      </div>
-
-      <div className="h-80 w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <BarChart
-            data={scheduleData}
-            margin={{ top: 10, right: 30, left: 0, bottom: 0 }}
-          >
-            <CartesianGrid strokeDasharray="3 3" />
-            <XAxis 
-              dataKey="time" 
-              tick={{ fill: "#6B7280", fontSize: 12 }}
-            />
-            <YAxis 
-              tick={{ fill: "#6B7280", fontSize: 12 }}
-              label={{ 
-                value: "Nabíjení (kWh)", 
-                angle: -90, 
-                position: "insideLeft",
-                style: { fill: "#6B7280" }
-              }}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <Bar 
-              name="Plánované nabíjení (kWh)"
-              dataKey="planned_charging_kwh" 
-              fill="#3B82F6"
-              radius={[4, 4, 0, 0]}
-            />
-          </BarChart>
-        </ResponsiveContainer>
-      </div>
+      {scheduleData.length === 0 ? (
+        <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
+          <p className="text-gray-600">{message || "Pro tento den není naplánováno žádné nabíjení ze sítě."}</p>
+        </div>
+      ) : (
+        <>
+          <div className="flex items-center justify-between mb-4">
+            <span className="text-sm text-gray-500">Celkové plánované nabíjení:</span>
+            <span className="text-xl font-bold text-blue-600">{totalCharging.toFixed(2)} kWh</span>
+          </div>
+          
+          <div className="space-y-3">
+            {scheduleData.map((item) => {
+              const priceInfo = getPriceInfo(item.hour);
+              
+              return (
+                <div 
+                  key={item.hour} 
+                  className="border rounded-lg bg-gray-50 p-4 flex flex-col md:flex-row md:items-center md:justify-between"
+                >
+                  <div className="flex items-center mb-2 md:mb-0">
+                    <div className="flex items-center justify-center w-12 h-12 rounded-full bg-blue-100 text-blue-700 mr-4">
+                      <span className="font-bold">{item.hour}:00</span>
+                    </div>
+                    <div>
+                      <div className="flex items-center">
+                        <span className="font-medium">Plánované nabíjení:</span>
+                        <span className="ml-2 font-bold text-blue-600">
+                          {(item.planned_charging_kwh as number).toFixed(2)} kWh
+                        </span>
+                      </div>
+                      {priceInfo && (
+                        <div className="text-sm text-gray-600 mt-0.5">
+                          Cena: {priceInfo.priceValue} Kč/kWh
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
       
       <div className="mt-4 text-sm text-gray-500 bg-gray-50 p-4 rounded-lg">
-        <p>Graf zobrazuje plánované nabíjení baterie ze sítě na základě optimalizace podle spotových cen elektřiny. Nabíjení ze solárních panelů není v grafu zahrnuto.</p>
+        <p>Zobrazeno plánované nabíjení baterie ze sítě na základě optimalizace podle spotových cen elektřiny. Nabíjení ze solárních panelů není zahrnuto.</p>
       </div>
     </div>
   );

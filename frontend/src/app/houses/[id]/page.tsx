@@ -14,6 +14,7 @@ import ConsumptionChart from "@/app/components/ConsumptionChart";
 import { DatePicker } from "@/components/ui/date-picker";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import ApplianceList from "@/app/components/ApplianceList";
+import ChargingScheduleChart from "@/app/components/ChargingScheduleChart";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -442,6 +443,14 @@ export default function Page() {
                 />
               </CardContent>
             </Card>
+          </div>
+
+          {/* Graf plánovaného nabíjení */}
+          <div className="col-span-2 mt-6">
+            <ChargingScheduleChart
+              houseId={parseInt(params.id as string)}
+              date={date}
+            />
           </div>
         </div>
       </div>

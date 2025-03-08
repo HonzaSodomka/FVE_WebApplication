@@ -1,6 +1,6 @@
 from django.http import JsonResponse
-from .models import ChargingData, ConsumptionData, PriceData, SolarData, House, Appliance
-from datetime import datetime
+from .models import ChargingData, ConsumptionData, PriceData, SolarData, House, Appliance, ChargingSchedule
+from datetime import datetime, timedelta
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import logging
@@ -672,3 +672,78 @@ def charging_data(request, house_id):
             return JsonResponse({'error': 'Interní chyba serveru'}, status=500)
             
     return JsonResponse({'error': 'Neplatná metoda'}, status=405)
+
+from datetime import timedelta
+from .models import ChargingSchedule
+
+@require_http_methods(["GET"])
+def charging_schedule(request, house_id):
+    """
+    Vrátí plánované nabíjení ze sítě pro daný dům a datum.
+    Pouze pro aktuální a následující den.
+    """
+    try:
+        house = House.objects.get(id=house_id)
+    except House.DoesNotExist:
+        logger.warning(f"Attempted to access charging schedule for non-existent house with ID {house_id}")
+        return JsonResponse({'error': 'Dům nenalezen'}, status=404)
+        
+    try:
+        date_str = request.GET.get('date')
+        if not date_str:
+            return JsonResponse({'error': 'Chybí parametr date'}, status=400)
+            
+        date = datetime.strptime(date_str, '%Y-%m-%d').date()
+        
+        # Omezení pouze na aktuální a následující den
+        today = datetime.now().date()
+        tomorrow = today + timedelta(days=1)
+        
+        if date < today:
+            logger.warning(f"Attempted to access charging schedule for past date {date}")
+            return JsonResponse({
+                'schedule': [],
+                'message': 'Plán nabíjení je dostupný pouze pro aktuální a následující den'
+            })
+            
+        if date > tomorrow:
+            logger.warning(f"Attempted to access charging schedule for future date {date} beyond tomorrow")
+            return JsonResponse({
+                'schedule': [],
+                'message': 'Plán nabíjení je dostupný pouze pro aktuální a následující den'
+            })
+        
+        schedule = ChargingSchedule.objects.filter(
+            house=house,
+            date=date
+        ).order_by('hour')
+        
+        schedule_data = []
+        for item in schedule:
+            schedule_data.append({
+                'hour': item.hour,
+                'planned_charging_kwh': item.planned_charging_kwh
+            })
+        
+        # Přidáváme informativní zprávu, pokud není naplánováno žádné nabíjení
+        message = None
+        if not schedule_data:
+            if date == today:
+                message = "Pro dnešní den není naplánováno žádné nabíjení ze sítě"
+            else:
+                message = "Pro zítřejší den není naplánováno žádné nabíjení ze sítě"
+            logger.info(f"No charging schedule found for house {house_id} on {date}")
+        else:
+            logger.info(f"Successfully returned charging schedule for house {house_id} on {date} ({len(schedule_data)} items)")
+        
+        return JsonResponse({
+            'schedule': schedule_data,
+            'message': message
+        })
+        
+    except ValueError:
+        logger.error(f"Invalid date format: {date_str}")
+        return JsonResponse({'error': 'Neplatný formát data'}, status=400)
+    except Exception as e:
+        logger.error(f"Error fetching charging schedule: {str(e)}")
+        return JsonResponse({'error': 'Interní chyba serveru'}, status=500)

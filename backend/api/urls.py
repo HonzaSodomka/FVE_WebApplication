@@ -12,4 +12,5 @@ urlpatterns = [
     path('houses/<int:house_id>/consumption/', views.consumption_data, name='consumption_data'),
     path('houses/<int:house_id>/charging/', views.charging_data, name='charging_data'),
     path('houses/<int:house_id>/toggle_simulation/', views.toggle_simulation, name='toggle_simulation'),
+    path('houses/<int:house_id>/charging_schedule/', views.charging_schedule, name='charging_schedule'),
 ]

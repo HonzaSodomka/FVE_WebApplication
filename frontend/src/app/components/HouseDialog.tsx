@@ -6,7 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil } from 'lucide-react';
+import { Plus, Pencil, Info } from 'lucide-react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -49,6 +49,22 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
+  // Doporučené hodnoty podle rizikového profilu
+  const recommendedValues = {
+    LOW: {
+      min_battery_level: 10,
+      max_level: 20
+    },
+    MEDIUM: {
+      min_battery_level: 7.5,
+      max_level: 15
+    },
+    HIGH: {
+      min_battery_level: 5,
+      max_level: 10
+    }
+  };
+
   useEffect(() => {
     if (house) {
       setFormData({
@@ -65,6 +81,16 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
       });
     }
   }, [house]);
+
+  useEffect(() => {
+    // Aktualizace doporučené hodnoty min_battery_level při změně rizikového profilu
+    if (!house) {
+      setFormData(prevData => ({
+        ...prevData,
+        min_battery_level: recommendedValues[prevData.risk_level].min_battery_level.toString()
+      }));
+    }
+  }, [formData.risk_level, house]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -111,7 +137,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
           solar_power: '',
           battery_capacity: '',
           current_battery_level: '0',
-          min_battery_level: '10',
+          min_battery_level: recommendedValues['MEDIUM'].min_battery_level.toString(),
           max_charging_power: '',
           max_discharging_power: '',
           charging_efficiency: '90',
@@ -235,17 +261,52 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
 
               <div>
                 <label className="block text-sm font-medium mb-1">
-                  Minimální úroveň baterie (%)
+                  Úroveň rizika
                 </label>
+                <Select 
+                  value={formData.risk_level}
+                  onValueChange={(value: 'LOW' | 'MEDIUM' | 'HIGH') => 
+                    setFormData({...formData, risk_level: value})
+                  }
+                >
+                  <SelectTrigger>
+                    <SelectValue placeholder="Vyberte úroveň rizika" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="LOW">Nízké - Nabíjí i za vyšší ceny</SelectItem>
+                    <SelectItem value="MEDIUM">Střední - Vyvážený přístup</SelectItem>
+                    <SelectItem value="HIGH">Vysoké - Agresivní optimalizace ceny</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <div className="flex items-center mb-1">
+                  <label className="block text-sm font-medium">
+                    Minimální úroveň baterie (%)
+                  </label>
+                  <div className="ml-2 flex items-center text-blue-600 text-xs">
+                    <Info className="h-3 w-3 mr-1" />
+                    Doporučeno: {recommendedValues[formData.risk_level].min_battery_level}%
+                  </div>
+                </div>
                 <Input
                   type="number"
-                  step="1"
+                  step="0.1"
                   min="0"
                   max="100"
                   value={formData.min_battery_level}
                   onChange={(e) => setFormData({...formData, min_battery_level: e.target.value})}
                   placeholder="Např. 10"
                 />
+                <div className="mt-1 text-xs text-gray-500">
+                  <p>Doporučené hodnoty podle rizikového profilu:</p>
+                  <ul className="list-disc pl-5 mt-1">
+                    <li>Nízké riziko: 10% (maximálně 20%)</li>
+                    <li>Střední riziko: 7.5% (maximálně 15%)</li>
+                    <li>Vysoké riziko: 5% (maximálně 10%)</li>
+                  </ul>
+                </div>
               </div>
 
               <div>
@@ -276,27 +337,6 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                   onChange={(e) => setFormData({...formData, discharging_efficiency: e.target.value})}
                   placeholder="Např. 90"
                 />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-1">
-                  Úroveň rizika
-                </label>
-                <Select 
-                  value={formData.risk_level}
-                  onValueChange={(value: 'LOW' | 'MEDIUM' | 'HIGH') => 
-                    setFormData({...formData, risk_level: value})
-                  }
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Vyberte úroveň rizika" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="LOW">Nízké - Nabíjí i za vyšší ceny</SelectItem>
-                    <SelectItem value="MEDIUM">Střední - Vyvážený přístup</SelectItem>
-                    <SelectItem value="HIGH">Vysoké - Agresivní optimalizace ceny</SelectItem>
-                  </SelectContent>
-                </Select>
               </div>
             </div>
 

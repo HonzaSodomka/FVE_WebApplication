@@ -1,8 +1,27 @@
+"""
+Datové modely pro aplikaci optimalizace nabíjení FVE baterie.
+
+Tento modul definuje všechny datové entity používané v systému, včetně:
+- Cenových dat elektřiny (PriceData)
+- Predikce solární výroby (SolarData)
+- Domů s FVE systémy (House)
+- Spotřebičů v domácnosti (Appliance)
+- Dat o spotřebě (ConsumptionData)
+- Záznamů o nabíjení (ChargingData)
+- Plánů nabíjení (ChargingSchedule)
+"""
+
 from django.db import models
 from datetime import date
+from django.core.exceptions import ValidationError
 from django.core.validators import MinValueValidator, MaxValueValidator
+import re
+
 
 class PriceData(models.Model):
+    """
+    Model pro ukládání hodinových cenových dat elektřiny na spotovém trhu.
+    """
     date = models.DateField()
     hour = models.IntegerField()
     price_czk = models.IntegerField()
@@ -10,15 +29,17 @@ class PriceData(models.Model):
     level_num = models.IntegerField()
 
     class Meta:
-        # Zajistíme, že kombinace data a hodiny bude unikátní
         unique_together = ['date', 'hour']
-        # Seřadíme podle data a hodiny
         ordering = ['date', 'hour']
 
     def __str__(self):
         return f"{self.date} {self.hour}:00 - {self.price_czk} CZK ({self.level})"
 
+
 class SolarData(models.Model):
+    """
+    Model pro ukládání dat o predikované solární výrobě.
+    """
     timestamp = models.DateTimeField(unique=True)
     watts = models.FloatField(null=True)  # Okamžitý výkon
     watt_hours_period = models.FloatField()  # Výroba za danou periodu
@@ -33,10 +54,16 @@ class SolarData(models.Model):
     def __str__(self):
         return f"{self.timestamp}: {self.watt_hours_period} Wh"
     
+
 class House(models.Model):
-    # Risk level pro nabíjení
+    """
+    Model reprezentující dům s fotovoltaickým systémem.
+    
+    Obsahuje parametry solárního systému, baterie a nastavení rizikového profilu
+    pro optimalizaci nabíjení.
+    """
     RISK_LEVELS = [
-        ('LOW', 'Nízké riziko'),      # Jistota energie za cenu vyšších nákladů
+        ('LOW', 'Nízké riziko'),       # Jistota energie za cenu vyšších nákladů
         ('MEDIUM', 'Střední riziko'),  # Vyvážený přístup
         ('HIGH', 'Vysoké riziko'),     # Agresivní optimalizace ceny s rizikem drahého dobíjení
     ]
@@ -49,7 +76,7 @@ class House(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    # Solární variace
+    # Solární variace pro simulaci reálných podmínek
     solar_variation = models.FloatField(
         default=1,
         verbose_name="Variace solární výroby"
@@ -65,12 +92,12 @@ class House(models.Model):
         verbose_name="Minimální povolená úroveň baterie (%)"
     )
     max_charging_power = models.FloatField(
-        default=0,  # Přidáno default=0
+        default=0,
         verbose_name="Maximální nabíjecí výkon (kW)",
         help_text="Jak rychle lze baterii nabíjet"
     )
     max_discharging_power = models.FloatField(
-        default=0,  # Přidáno default=0
+        default=0,
         verbose_name="Maximální vybíjecí výkon (kW)",
         help_text="Jak rychle lze baterii vybíjet"
     )
@@ -83,7 +110,7 @@ class House(models.Model):
         verbose_name="Účinnost vybíjení (%)"
     )
     
-    # Risk level
+    # Rizikový profil pro optimalizaci nabíjení
     risk_level = models.CharField(
         max_length=6,
         choices=RISK_LEVELS,
@@ -103,7 +130,24 @@ class House(models.Model):
         verbose_name = "Dům"
         verbose_name_plural = "Domy"
         
+
 class Appliance(models.Model):
+    """
+    Model reprezentující spotřebič v domácnosti.
+    
+    Systém podporuje čtyři typy spotřebičů:
+    1. CONSTANT - konstantní spotřeba (např. router)
+    2. CYCLIC - cyklický spotřebič střídající aktivní a standby režimy (např. lednice)
+    3. SCHEDULED - plánovaný spotřebič spouštěný v definovaných časech (např. pračka)
+    4. ON_DEMAND - spotřebič používaný náhodně podle pravděpodobnostního modelu (např. konvice)
+    """
+    APPLIANCE_TYPES = [
+        ('CONSTANT', 'Konstantní spotřeba'),      # např. router
+        ('CYCLIC', 'Cyklická spotřeba'),         # např. lednice
+        ('SCHEDULED', 'Plánovaná spotřeba'),      # např. pračka
+        ('ON_DEMAND', 'Spotřeba na vyžádání'),    # např. konvice
+    ]
+    
     # Základní pole
     house = models.ForeignKey(
         House,
@@ -119,13 +163,6 @@ class Appliance(models.Model):
         verbose_name="Spotřeba v pohotovostním režimu (W)",
         help_text="Povinné pro cyklické spotřebiče, volitelné pro plánované a na vyžádání"
     )
-    
-    APPLIANCE_TYPES = [
-        ('CONSTANT', 'Konstantní spotřeba'),      # např. router
-        ('CYCLIC', 'Cyklická spotřeba'),         # např. lednice
-        ('SCHEDULED', 'Plánovaná spotřeba'),      # např. pračka
-        ('ON_DEMAND', 'Spotřeba na vyžádání'),    # např. konvice
-    ]
     appliance_type = models.CharField(
         max_length=20,
         choices=APPLIANCE_TYPES,
@@ -194,63 +231,78 @@ class Appliance(models.Model):
     )
 
     def save(self, *args, **kwargs):
-        from django.core.exceptions import ValidationError
-        
+        """
+        Přepisuje metodu save pro automatické nastavení polí podle typu spotřebiče
+        a validaci povinných údajů.
+        """
         # Validace standby_power podle typu spotřebiče
         if self.appliance_type == 'CYCLIC' and not self.standby_power:
             raise ValidationError('Pro cyklické spotřebiče je povinné vyplnit spotřebu v pohotovostním režimu')
         
         # Nastavení defaultních hodnot podle typu spotřebiče
         if self.appliance_type == 'CONSTANT':
-            self.standby_power = None
-            self.in_standby = None
-            self.remaining_minutes = None
-            self.is_active = None
-            self.next_start_time = None
-            self.planned_starts = None
-            self.remaining_minutes_list = None
-            self.run_duration_min = None
-            self.run_duration_max = None
-            self.pause_duration_min = None
-            self.pause_duration_max = None
-            self.usage_duration_min = None
-            self.usage_duration_max = None
-            self.weekday_hours = None
-            self.weekend_hours = None
-            
+            self._reset_and_set_constant_fields()
         elif self.appliance_type == 'CYCLIC':
-            self.is_active = None
-            self.next_start_time = None
-            self.planned_starts = None
-            self.remaining_minutes_list = None
-            self.usage_duration_min = None
-            self.usage_duration_max = None
-            self.weekday_hours = None
-            self.weekend_hours = None
-            
+            self._reset_and_set_cyclic_fields()
         elif self.appliance_type == 'SCHEDULED':
-            self.in_standby = None
-            self.remaining_minutes_list = None
-            self.run_duration_min = None
-            self.run_duration_max = None
-            self.pause_duration_min = None
-            self.pause_duration_max = None
-            self.planned_starts = None
-            
+            self._reset_and_set_scheduled_fields()
         elif self.appliance_type == 'ON_DEMAND':
-            self.in_standby = None
-            self.remaining_minutes = None
-            self.run_duration_min = None
-            self.run_duration_max = None
-            self.pause_duration_min = None
-            self.pause_duration_max = None
-            self.next_start_time = None
-            if not self.remaining_minutes_list:
-                self.remaining_minutes_list = list()
-            if not self.planned_starts:
-                self.planned_starts = list()
+            self._reset_and_set_on_demand_fields()
 
         super().save(*args, **kwargs)
+    
+    def _reset_and_set_constant_fields(self):
+        """Nastaví pole pro konstantní spotřebiče a zruší ostatní pole."""
+        self.standby_power = None
+        self.in_standby = None
+        self.remaining_minutes = None
+        self.is_active = None
+        self.next_start_time = None
+        self.planned_starts = None
+        self.remaining_minutes_list = None
+        self.run_duration_min = None
+        self.run_duration_max = None
+        self.pause_duration_min = None
+        self.pause_duration_max = None
+        self.usage_duration_min = None
+        self.usage_duration_max = None
+        self.weekday_hours = None
+        self.weekend_hours = None
+    
+    def _reset_and_set_cyclic_fields(self):
+        """Nastaví pole pro cyklické spotřebiče a zruší ostatní pole."""
+        self.is_active = None
+        self.next_start_time = None
+        self.planned_starts = None
+        self.remaining_minutes_list = None
+        self.usage_duration_min = None
+        self.usage_duration_max = None
+        self.weekday_hours = None
+        self.weekend_hours = None
+    
+    def _reset_and_set_scheduled_fields(self):
+        """Nastaví pole pro plánované spotřebiče a zruší ostatní pole."""
+        self.in_standby = None
+        self.remaining_minutes_list = None
+        self.run_duration_min = None
+        self.run_duration_max = None
+        self.pause_duration_min = None
+        self.pause_duration_max = None
+        self.planned_starts = None
+    
+    def _reset_and_set_on_demand_fields(self):
+        """Nastaví pole pro spotřebiče na vyžádání a zruší ostatní pole."""
+        self.in_standby = None
+        self.remaining_minutes = None
+        self.run_duration_min = None
+        self.run_duration_max = None
+        self.pause_duration_min = None
+        self.pause_duration_max = None
+        self.next_start_time = None
+        if not self.remaining_minutes_list:
+            self.remaining_minutes_list = list()
+        if not self.planned_starts:
+            self.planned_starts = list()
 
     def __str__(self):
         return f"{self.name} ({self.get_appliance_type_display()}) - {self.house.name}"
@@ -259,7 +311,13 @@ class Appliance(models.Model):
         verbose_name = "Spotřebič"
         verbose_name_plural = "Spotřebiče"
 
+
 class ConsumptionData(models.Model):
+    """
+    Model pro ukládání minutových dat o spotřebě elektřiny v domě.
+    
+    Každý záznam obsahuje spotřebu jednotlivých spotřebičů v daném čase.
+    """
     house = models.ForeignKey(
         House,
         on_delete=models.CASCADE,
@@ -283,16 +341,22 @@ class ConsumptionData(models.Model):
         verbose_name_plural = "Spotřeby"
 
     def clean(self):
-        import re
+        """Validuje formát času."""
         if not re.match(r'^([0-1][0-9]|2[0-3]):[0-5][0-9]$', self.time):
-            from django.core.exceptions import ValidationError
             raise ValidationError({'time': 'Čas musí být ve formátu HH:MM (00:00-23:59)'})
 
     def __str__(self):
         total = sum(item['consumption_w'] for item in self.appliance_consumption)
         return f"{self.house.name} - {self.date} {self.time}: {total}W"
     
+
 class ChargingData(models.Model):
+    """
+    Model pro ukládání denních dat o nabíjení baterie.
+    
+    Sleduje množství energie nabyté ze solárů a ze sítě, 
+    včetně nákladů na nabíjení ze sítě.
+    """
     house = models.ForeignKey(
         House,
         on_delete=models.CASCADE,
@@ -325,7 +389,13 @@ class ChargingData(models.Model):
     def __str__(self):
         return f"{self.house.name} - {self.date}: Solar {self.solar_charged_kwh:.1f}kWh, Grid {self.grid_charged_kwh:.1f}kWh ({self.grid_charged_cost:.0f}Kč)"
     
+
 class ChargingSchedule(models.Model):
+    """
+    Model pro ukládání plánu nabíjení baterie ze sítě.
+    
+    Každý záznam definuje množství energie, které má být nabito v konkrétní hodině daného dne.
+    """
     house = models.ForeignKey(
         'House',
         on_delete=models.CASCADE,

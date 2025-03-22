@@ -48,6 +48,35 @@ def get_adjusted_duration(min_duration, max_duration, is_peak_time, for_active_s
        
    return random.randint(adjusted_min, adjusted_max)
 
+def check_if_inactive(appliance_id, current_date, current_hour, inactive_windows):
+    """
+    Zjistí, zda je spotřebič v okně deaktivace pro CONSTANT a CYCLIC spotřebiče.
+    
+    Args:
+        appliance_id: ID spotřebiče
+        current_date: Aktuální datum
+        current_hour: Aktuální hodina
+        inactive_windows: Seznam oken deaktivace
+        
+    Returns:
+        bool: True pokud je spotřebič neaktivní (v okně deaktivace)
+    """
+    if not inactive_windows:
+        return False
+        
+    current_date_str = current_date.strftime('%Y-%m-%d')
+    
+    # Zkontrolujeme, zda aktuální čas spadá do některého okna deaktivace
+    for window in inactive_windows:
+        if window.get('date') == current_date_str:
+            start_hour = window.get('start_hour')
+            end_hour = window.get('end_hour')
+            
+            if start_hour <= current_hour < end_hour:
+                return True  # Spotřebič je neaktivní
+    
+    return False  # Nenalezeno žádné okno deaktivace
+
 def simulate_minute_consumption():
    try:
        logger.info("ZAHAJUJI SIMULACI SPOTŘEBY")
@@ -65,18 +94,20 @@ def simulate_minute_consumption():
        is_weekend = current_time.weekday() >= 5
        logger.info(f"Simuluji pro čas: {current_date} {current_time_str} ({'víkend' if is_weekend else 'pracovní den'})")
        
-       # Zjistíme, které speciální domy jsou aktivní
+       # Zjistíme, které speciální domy jsou aktivní a jejich rizikové profily
        cur.execute("""
-           SELECT id FROM api_house
+           SELECT id, risk_level FROM api_house
            WHERE is_active = true AND id IN (9, 999, 9999, 99999)
        """)
-       special_house_ids = [row[0] for row in cur.fetchall()]
+       special_houses = {row[0]: row[1] for row in cur.fetchall()}
+       special_house_ids = list(special_houses.keys())
        logger.info(f"Aktivní speciální domy: {special_house_ids}")
        
        # Načteme všechny spotřebiče pro všechny aktivní domy
        cur.execute("""
            SELECT 
                h.id as house_id,
+               h.risk_level,
                a.id as appliance_id,
                a.power_consumption,
                a.standby_power,
@@ -94,7 +125,8 @@ def simulate_minute_consumption():
                a.weekday_hours,
                a.weekend_hours,
                a.remaining_minutes_list,
-               a.planned_starts
+               a.planned_starts,
+               a.inactive_windows
            FROM api_house h
            JOIN api_appliance a ON h.id = a.house_id
            WHERE h.is_active = true
@@ -104,78 +136,89 @@ def simulate_minute_consumption():
        
        # Pro každý dům sledujeme seznam spotřebičů a celkovou spotřebu
        houses = {}
-       for (house_id, appliance_id, power, standby_power, app_type, is_active, 
+       for (house_id, risk_level, appliance_id, power, standby_power, app_type, is_active, 
             in_standby, remaining_minutes, run_duration_min, run_duration_max, 
             pause_duration_min, pause_duration_max, next_start_time,
             usage_duration_min, usage_duration_max, weekday_hours, weekend_hours,
-            remaining_minutes_list, planned_starts) in rows:
+            remaining_minutes_list, planned_starts, inactive_windows) in rows:
            
            # Vytvoříme nový záznam pro dům pokud neexistuje
            if house_id not in houses:
                houses[house_id] = {
                    'appliances': [],  # Seznam spotřebičů
-                   'total_wh': 0      # Celková spotřeba ve Wh
+                   'total_wh': 0,     # Celková spotřeba ve Wh
+                   'risk_level': risk_level  # Rizikový profil domu
                }
                
            # Spočítáme spotřebu pro každý typ spotřebiče
            if app_type == 'CONSTANT':
-               variation = random.uniform(0.9, 1.0)
-               minute_consumption = (power * variation) / 60
-               logger.debug(f"Spotřebič {appliance_id} (CONSTANT): {minute_consumption}W/min (variation: {variation:.2f})")
-               
-           elif app_type == 'CYCLIC':
-               if remaining_minutes == 0:
-                   peak_time = is_peak_time(current_time, is_weekend)
-                   
-                   if in_standby:
-                       new_remaining = get_adjusted_duration(
-                           run_duration_min,
-                           run_duration_max,
-                           peak_time,
-                           for_active_state=True
-                       )
-                       cur.execute("""
-                           UPDATE api_appliance 
-                           SET is_active = true,
-                               in_standby = false,
-                               remaining_minutes = %s
-                           WHERE id = %s
-                       """, [new_remaining, appliance_id])
-                       is_active = True
-                       in_standby = False
-                   else:
-                       new_remaining = get_adjusted_duration(
-                           pause_duration_min,
-                           pause_duration_max,
-                           peak_time,
-                           for_active_state=False
-                       )
-                       cur.execute("""
-                           UPDATE api_appliance 
-                           SET is_active = false,
-                               in_standby = true,
-                               remaining_minutes = %s
-                           WHERE id = %s
-                       """, [new_remaining, appliance_id])
-                       is_active = False
-                       in_standby = True
-                   
-                   logger.debug(f"Spotřebič {appliance_id} změnil stav, nový čas: {new_remaining}min (špička: {peak_time})")
-                   remaining_minutes = new_remaining
-               
-               if is_active:
+               # Pro EXTREME domy kontrolujeme, zda není v okně deaktivace
+               if risk_level == 'EXTREME' and check_if_inactive(appliance_id, current_date, current_time.hour, inactive_windows):
+                   minute_consumption = 0
+                   logger.debug(f"Spotřebič {appliance_id} (CONSTANT) je neaktivní v okně deaktivace: 0W/min")
+               else:
                    variation = random.uniform(0.9, 1.0)
                    minute_consumption = (power * variation) / 60
-               else:
-                   minute_consumption = standby_power / 60
-               logger.debug(f"Spotřebič {appliance_id} (CYCLIC): {minute_consumption}W/min (Active: {is_active})")
+                   logger.debug(f"Spotřebič {appliance_id} (CONSTANT): {minute_consumption}W/min (variation: {variation:.2f})")
                
-               if remaining_minutes > 0:
-                   cur.execute("""
-                       UPDATE api_appliance 
-                       SET remaining_minutes = remaining_minutes - 1
-                       WHERE id = %s
-                   """, [appliance_id])
+           elif app_type == 'CYCLIC':
+               # Pro EXTREME domy kontrolujeme, zda není v okně deaktivace
+               if risk_level == 'EXTREME' and check_if_inactive(appliance_id, current_date, current_time.hour, inactive_windows):
+                   minute_consumption = 0
+                   logger.debug(f"Spotřebič {appliance_id} (CYCLIC) je neaktivní v okně deaktivace: 0W/min")
+               else:
+                   if remaining_minutes == 0:
+                       peak_time = is_peak_time(current_time, is_weekend)
+                       
+                       if in_standby:
+                           new_remaining = get_adjusted_duration(
+                               run_duration_min,
+                               run_duration_max,
+                               peak_time,
+                               for_active_state=True
+                           )
+                           cur.execute("""
+                               UPDATE api_appliance 
+                               SET is_active = true,
+                                   in_standby = false,
+                                   remaining_minutes = %s
+                               WHERE id = %s
+                           """, [new_remaining, appliance_id])
+                           is_active = True
+                           in_standby = False
+                       else:
+                           new_remaining = get_adjusted_duration(
+                               pause_duration_min,
+                               pause_duration_max,
+                               peak_time,
+                               for_active_state=False
+                           )
+                           cur.execute("""
+                               UPDATE api_appliance 
+                               SET is_active = false,
+                                   in_standby = true,
+                                   remaining_minutes = %s
+                               WHERE id = %s
+                           """, [new_remaining, appliance_id])
+                           is_active = False
+                           in_standby = True
+                       
+                       logger.debug(f"Spotřebič {appliance_id} změnil stav, nový čas: {new_remaining}min (špička: {peak_time})")
+                       remaining_minutes = new_remaining
+                   
+                   if is_active:
+                       variation = random.uniform(0.9, 1.0)
+                       minute_consumption = (power * variation) / 60
+                   else:
+                       minute_consumption = standby_power / 60
+                   logger.debug(f"Spotřebič {appliance_id} (CYCLIC): {minute_consumption}W/min (Active: {is_active})")
+                   
+                   if remaining_minutes > 0:
+                       cur.execute("""
+                           UPDATE api_appliance 
+                           SET remaining_minutes = remaining_minutes - 1
+                           WHERE id = %s
+                       """, [appliance_id])
 
            elif app_type == 'SCHEDULED':
                if remaining_minutes > 0:
@@ -312,10 +355,11 @@ def simulate_minute_consumption():
            
            # Pro každý další speciální dům (kromě domu 9), který je aktivní
            for house_id in [h for h in special_house_ids if h != 9]:
-               # Zkopírujeme data domu 9 do tohoto domu
+               # Zkopírujeme data domu 9 do tohoto domu, ale zachováme rizikový profil
                houses[house_id] = {
                    'appliances': house9_data['appliances'].copy(),
-                   'total_wh': house9_data['total_wh']
+                   'total_wh': house9_data['total_wh'],
+                   'risk_level': houses[house_id]['risk_level']  # Zachováme rizikový profil
                }
                logger.info(f"Data domu 9 zkopírována do domu {house_id}")
        

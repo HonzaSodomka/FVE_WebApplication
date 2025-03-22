@@ -62,6 +62,7 @@ def simulate_minute_consumption():
        current_time = datetime.now().replace(second=0, microsecond=0)
        current_date = current_time.date()
        current_time_str = current_time.strftime('%H:%M')
+       current_hour = current_time.hour
        is_weekend = current_time.weekday() >= 5
        logger.info(f"Simuluji pro čas: {current_date} {current_time_str} ({'víkend' if is_weekend else 'pracovní den'})")
        
@@ -72,6 +73,16 @@ def simulate_minute_consumption():
        """)
        special_house_ids = [row[0] for row in cur.fetchall()]
        logger.info(f"Aktivní speciální domy: {special_house_ids}")
+       
+       # Načteme informace o EXTREME domech pro novou funkcionalitu
+       cur.execute("""
+           SELECT id, risk_level 
+           FROM api_house
+           WHERE is_active = true
+       """)
+       house_risk_levels = {row[0]: row[1] for row in cur.fetchall()}
+       extreme_house_ids = [id for id, level in house_risk_levels.items() if level == 'EXTREME']
+       logger.info(f"Nalezeno {len(extreme_house_ids)} EXTREME domů: {extreme_house_ids}")
        
        # Načteme všechny spotřebiče pro všechny aktivní domy
        cur.execute("""
@@ -94,7 +105,8 @@ def simulate_minute_consumption():
                a.weekday_hours,
                a.weekend_hours,
                a.remaining_minutes_list,
-               a.planned_starts
+               a.planned_starts,
+               a.inactive_windows
            FROM api_house h
            JOIN api_appliance a ON h.id = a.house_id
            WHERE h.is_active = true
@@ -108,7 +120,7 @@ def simulate_minute_consumption():
             in_standby, remaining_minutes, run_duration_min, run_duration_max, 
             pause_duration_min, pause_duration_max, next_start_time,
             usage_duration_min, usage_duration_max, weekday_hours, weekend_hours,
-            remaining_minutes_list, planned_starts) in rows:
+            remaining_minutes_list, planned_starts, inactive_windows) in rows:
            
            # Vytvoříme nový záznam pro dům pokud neexistuje
            if house_id not in houses:
@@ -116,9 +128,36 @@ def simulate_minute_consumption():
                    'appliances': [],  # Seznam spotřebičů
                    'total_wh': 0      # Celková spotřeba ve Wh
                }
+           
+           # NOVÁ FUNKCE - Kontrola inactive_windows pro EXTREME domy
+           is_inactive = False
+           if house_id in extreme_house_ids and app_type in ['CONSTANT', 'CYCLIC'] and inactive_windows:
+               # Převedeme inactive_windows z JSON na Python objekt, pokud je to potřeba
+               if isinstance(inactive_windows, str):
+                   inactive_windows = json.loads(inactive_windows)
+                
+               # Kontrola, zda aktuální čas odpovídá některému oknu neaktivity
+               for window in inactive_windows:
+                   # Kontrola data
+                   window_date = window.get('date')
+                   if window_date and window_date != current_date.isoformat():
+                       continue
+                       
+                   # Kontrola hodin
+                   start_hour = window.get('start_hour', 0)
+                   end_hour = window.get('end_hour', 0)
+                   
+                   if start_hour <= current_hour < end_hour:
+                       is_inactive = True
+                       logger.info(f"Spotřebič {appliance_id} ({app_type}) v domě {house_id} je vypnutý (čas {current_hour} je v neaktivním okně {start_hour}-{end_hour})")
+                       break
                
            # Spočítáme spotřebu pro každý typ spotřebiče
-           if app_type == 'CONSTANT':
+           if is_inactive:
+               # Spotřebič je v neaktivním okně (pouze pro EXTREME domy)
+               minute_consumption = 0
+               logger.info(f"Spotřebič {appliance_id} ({app_type}) v domě {house_id} je v neaktivním okně - spotřeba 0W")
+           elif app_type == 'CONSTANT':
                variation = random.uniform(0.9, 1.0)
                minute_consumption = (power * variation) / 60
                logger.debug(f"Spotřebič {appliance_id} (CONSTANT): {minute_consumption}W/min (variation: {variation:.2f})")

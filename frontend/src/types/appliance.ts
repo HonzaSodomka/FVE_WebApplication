@@ -3,6 +3,13 @@ export interface TimeWindow {
   end: number;
   probability: number;
   uses?: number; 
+  is_active?: boolean;  // Přidání pole is_active pro optimalizaci
+}
+
+export interface InactiveWindow {
+  date: string;
+  start_hour: number;
+  end_hour: number;
 }
 
 export interface Appliance {
@@ -25,4 +32,9 @@ export interface Appliance {
   in_standby?: boolean | null;
   remaining_minutes?: number | null;
   next_start_time?: string | null;
+  
+  // Nová pole pro optimalizaci spotřeby
+  priority_level: number;
+  interruptible: boolean;
+  inactive_windows?: InactiveWindow[] | null;
 }

@@ -27,6 +27,7 @@ const TimeWindowInput: React.FC<TimeWindowInputProps> = ({
           start: 0,
           end: 24,
           probability: 1.0,
+          is_active: true,
           ...(showUses && { uses: 1 }),
         },
       ]);
@@ -40,15 +41,21 @@ const TimeWindowInput: React.FC<TimeWindowInputProps> = ({
   const updateWindow = (
     index: number,
     field: keyof TimeWindow,
-    value: number
+    value: number | boolean
   ) => {
     const newWindows = [...windows];
+    
     if (field === "probability") {
       // Převod z procent na desetinné číslo
-      newWindows[index][field] = value / 100;
+      newWindows[index]["probability"] = (value as number) / 100;
+    } else if (field === "is_active") {
+      // Pracujeme s boolean hodnotou
+      newWindows[index]["is_active"] = value as boolean;
     } else {
-      newWindows[index][field] = value;
+      // Pracujeme s číselnou hodnotou (start, end, uses)
+      newWindows[index][field] = value as number;
     }
+    
     onChange(newWindows);
   };
 
@@ -57,7 +64,7 @@ const TimeWindowInput: React.FC<TimeWindowInputProps> = ({
       <label className="text-sm text-gray-600 mb-2 block">{label}</label>
       {windows.map((window, index) => (
         <div key={index} className="flex items-center gap-2 mb-2">
-          <div className={`flex-1 grid ${showUses ? 'grid-cols-4' : 'grid-cols-3'} gap-2`}>
+          <div className={`flex-1 grid ${showUses ? 'grid-cols-5' : 'grid-cols-4'} gap-2`}>
             <div>
               <label className="text-xs text-gray-500">Od</label>
               <select
@@ -99,7 +106,7 @@ const TimeWindowInput: React.FC<TimeWindowInputProps> = ({
                 min="0"
                 max="100"
                 className="w-full"
-                value={Math.round(window.probability * 100)}
+                value={Math.round((window.probability || 0) * 100)}
                 onChange={(e) =>
                   updateWindow(index, "probability", parseInt(e.target.value))
                 }
@@ -119,6 +126,19 @@ const TimeWindowInput: React.FC<TimeWindowInputProps> = ({
                 />
               </div>
             )}
+            <div>
+              <label className="text-xs text-gray-500">Aktivní</label>
+              <div className="flex items-center h-10 pl-3">
+                <input
+                  type="checkbox"
+                  checked={window.is_active !== false}
+                  onChange={(e) =>
+                    updateWindow(index, "is_active", e.target.checked)
+                  }
+                  className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                />
+              </div>
+            </div>
           </div>
           {windows.length > 0 && (
             <Button

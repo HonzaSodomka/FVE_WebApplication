@@ -37,6 +37,8 @@ interface FormData {
   usage_duration_max: string;
   weekday_hours: TimeWindow[];
   weekend_hours: TimeWindow[];
+  priority_level: number;
+  interruptible: boolean;
 }
 
 interface ApplianceDialogProps {
@@ -64,6 +66,8 @@ export default function ApplianceDialog({
     usage_duration_max: "",
     weekday_hours: [],
     weekend_hours: [],
+    priority_level: 1,
+    interruptible: true
   });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -95,6 +99,8 @@ export default function ApplianceDialog({
         usage_duration_max: appliance.usage_duration_max?.toString() || "",
         weekday_hours: appliance.weekday_hours || [],
         weekend_hours: appliance.weekend_hours || [],
+        priority_level: appliance.priority_level || 1,
+        interruptible: appliance.interruptible !== false // Pokud undefined nebo true, vrátí true
       });
     }
   }, [appliance]);
@@ -147,6 +153,17 @@ export default function ApplianceDialog({
         }
       }
 
+      // Zajištění, že všechna časová okna mají flag is_active
+      const processedWeekdayHours = formData.weekday_hours.map(window => ({
+        ...window,
+        is_active: window.is_active !== false // Defaultně true, pokud není explicitně false
+      }));
+      
+      const processedWeekendHours = formData.weekend_hours.map(window => ({
+        ...window,
+        is_active: window.is_active !== false // Defaultně true, pokud není explicitně false
+      }));
+
       let url = `${API_URL}/api/houses/${houseId}/appliances/`;
       let method = "POST";
 
@@ -165,6 +182,8 @@ export default function ApplianceDialog({
           name: formData.name,
           power_consumption: parseInt(formData.power_consumption),
           appliance_type: formData.appliance_type,
+          priority_level: formData.priority_level,
+          interruptible: formData.interruptible,
           ...(formData.appliance_type === "CYCLIC" && {
             standby_power: parseInt(formData.standby_power), // Povinné pro CYCLIC
             run_duration_min: parseInt(formData.run_duration_min),
@@ -178,14 +197,14 @@ export default function ApplianceDialog({
               : 0,
             usage_duration_min: parseInt(formData.usage_duration_min),
             usage_duration_max: parseInt(formData.usage_duration_max),
-            weekday_hours: formData.weekday_hours,
-            weekend_hours: formData.weekend_hours,
+            weekday_hours: processedWeekdayHours,
+            weekend_hours: processedWeekendHours,
           }),
           ...(formData.appliance_type === "ON_DEMAND" && {
             usage_duration_min: parseInt(formData.usage_duration_min),
             usage_duration_max: parseInt(formData.usage_duration_max),
-            weekday_hours: formData.weekday_hours,
-            weekend_hours: formData.weekend_hours,
+            weekday_hours: processedWeekdayHours,
+            weekend_hours: processedWeekendHours,
           }),
         }),
       });
@@ -208,6 +227,8 @@ export default function ApplianceDialog({
           usage_duration_max: "",
           weekday_hours: [],
           weekend_hours: [],
+          priority_level: 1,
+          interruptible: true
         });
       }
     } catch (err) {
@@ -251,6 +272,59 @@ export default function ApplianceDialog({
           }
           required={isRequired}
         />
+      </div>
+    );
+  };
+
+  // Nová sekce pro prioritu a přerušitelnost
+  const renderOptimizationSection = () => {
+    return (
+      <div className="space-y-4 border-t pt-4 mt-4">
+        <h3 className="text-lg font-medium">Nastavení optimalizace spotřeby</h3>
+        
+        <div>
+          <label className="block text-sm font-medium mb-1">
+            Priorita spotřebiče
+          </label>
+          <Select
+            value={formData.priority_level.toString()}
+            onValueChange={(value) => setFormData({...formData, priority_level: parseInt(value)})}
+          >
+            <SelectTrigger className="w-full">
+              <SelectValue placeholder="Vyberte prioritu" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="1">Kritický - nikdy nevypínat</SelectItem>
+              <SelectItem value="2">Vysoká priorita - vypnout v krajní nouzi</SelectItem>
+              <SelectItem value="3">Střední priorita - možné vypnout při vysokých cenách</SelectItem>
+              <SelectItem value="4">Nízká priorita - vypnout jako první</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="text-xs text-gray-500 mt-1">
+            Určuje, jak důležitý je spotřebič a v jakém pořadí bude vypínán při optimalizaci.
+          </p>
+        </div>
+        
+        <div>
+          <div className="flex items-center">
+            <input
+              type="checkbox"
+              id="interruptible"
+              checked={formData.interruptible}
+              onChange={(e) =>
+                setFormData({...formData, interruptible: e.target.checked})
+              }
+              className="h-4 w-4 rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+            />
+            <label htmlFor="interruptible" className="ml-2 block text-sm text-gray-700">
+              Lze přerušit za běhu
+            </label>
+          </div>
+          <p className="text-xs text-gray-500 mt-1 ml-6">
+            Pokud je zaškrtnuto, spotřebič může být vypnut i když právě běží.
+            Vhodné např. pro osvětlení nebo televizi, ale ne pro pračku nebo troubu.
+          </p>
+        </div>
       </div>
     );
   };
@@ -502,6 +576,9 @@ export default function ApplianceDialog({
               </div>
             </div>
           )}
+
+          {/* Sekce pro nastavení optimalizace */}
+          {renderOptimizationSection()}
 
           <div className="flex justify-end gap-2">
             <Button

@@ -249,7 +249,9 @@ def house_appliances(request, house_id):
                 'weekday_hours', 'weekend_hours',
                 'remaining_minutes_list', 'planned_starts',
                 'is_active', 'in_standby', 'remaining_minutes',
-                'next_start_time'
+                'next_start_time',
+                # Nová pole pro optimalizaci spotřeby
+                'priority_level', 'interruptible', 'inactive_windows'
             ))
             return JsonResponse({'appliances': appliances})
         except Exception as e:
@@ -264,7 +266,10 @@ def house_appliances(request, house_id):
                 'house': house,
                 'name': data['name'],
                 'power_consumption': data['power_consumption'],
-                'appliance_type': data['appliance_type']
+                'appliance_type': data['appliance_type'],
+                # Přidaná nová pole s defaultními hodnotami, pokud nejsou poskytnuta
+                'priority_level': data.get('priority_level', 1),
+                'interruptible': data.get('interruptible', True),
             }
 
             if data['appliance_type'] == 'CYCLIC':
@@ -276,30 +281,64 @@ def house_appliances(request, house_id):
                     run_duration_min=data['run_duration_min'],
                     run_duration_max=data['run_duration_max'],
                     pause_duration_min=data['pause_duration_min'],
-                    pause_duration_max=data['pause_duration_max']
+                    pause_duration_max=data['pause_duration_max'],
+                    inactive_windows=data.get('inactive_windows', [])
                 )
             elif data['appliance_type'] == 'SCHEDULED':
+                # Zajistíme, že všechna časová okna mají is_active
+                weekday_hours = data.get('weekday_hours', None)
+                weekend_hours = data.get('weekend_hours', None)
+                
+                if weekday_hours:
+                    for window in weekday_hours:
+                        if 'is_active' not in window:
+                            window['is_active'] = True
+                
+                if weekend_hours:
+                    for window in weekend_hours:
+                        if 'is_active' not in window:
+                            window['is_active'] = True
+                            
                 appliance = Appliance.objects.create(
                     **appliance_data,
                     standby_power=data.get('standby_power', 0),
                     usage_duration_min=data['usage_duration_min'],
                     usage_duration_max=data['usage_duration_max'],
-                    weekday_hours=data.get('weekday_hours', None),
-                    weekend_hours=data.get('weekend_hours', None),
+                    weekday_hours=weekday_hours,
+                    weekend_hours=weekend_hours,
+                    inactive_windows=data.get('inactive_windows', [])
                 )
             elif data['appliance_type'] == 'ON_DEMAND':
+                # Zajistíme, že všechna časová okna mají is_active
+                weekday_hours = data.get('weekday_hours', None)
+                weekend_hours = data.get('weekend_hours', None)
+                
+                if weekday_hours:
+                    for window in weekday_hours:
+                        if 'is_active' not in window:
+                            window['is_active'] = True
+                
+                if weekend_hours:
+                    for window in weekend_hours:
+                        if 'is_active' not in window:
+                            window['is_active'] = True
+                            
                 appliance = Appliance.objects.create(
                     **appliance_data,
                     standby_power=data.get('standby_power', 0),
                     usage_duration_min=data['usage_duration_min'],
                     usage_duration_max=data['usage_duration_max'],
-                    weekday_hours=data.get('weekday_hours', None),
-                    weekend_hours=data.get('weekend_hours', None),
+                    weekday_hours=weekday_hours,
+                    weekend_hours=weekend_hours,
                     remaining_minutes_list=[],
-                    planned_starts=[]
+                    planned_starts=[],
+                    inactive_windows=data.get('inactive_windows', [])
                 )
             elif data['appliance_type'] == 'CONSTANT':
-                appliance = Appliance.objects.create(**appliance_data)
+                appliance = Appliance.objects.create(
+                    **appliance_data,
+                    inactive_windows=data.get('inactive_windows', [])
+                )
             else:
                 logger.error(f"Unknown appliance type: {data['appliance_type']}")
                 return JsonResponse({'error': 'Neznámý typ spotřebiče'}, status=400)
@@ -325,7 +364,10 @@ def house_appliances(request, house_id):
                 'is_active': appliance.is_active,
                 'in_standby': appliance.in_standby,
                 'remaining_minutes': appliance.remaining_minutes,
-                'next_start_time': appliance.next_start_time
+                'next_start_time': appliance.next_start_time,
+                'priority_level': appliance.priority_level,
+                'interruptible': appliance.interruptible,
+                'inactive_windows': appliance.inactive_windows
             })
             
         except KeyError as e:
@@ -361,13 +403,23 @@ def house_appliances(request, house_id):
             appliance = Appliance.objects.get(id=appliance_id, house=house)
             data = json.loads(request.body)
             
+            # Aktualizace základních polí
             if 'name' in data:
                 appliance.name = data['name']
             if 'power_consumption' in data:
                 appliance.power_consumption = data['power_consumption']
             if 'appliance_type' in data:
                 appliance.appliance_type = data['appliance_type']
+                
+            # Aktualizace polí pro optimalizaci
+            if 'priority_level' in data:
+                appliance.priority_level = data['priority_level']
+            if 'interruptible' in data:
+                appliance.interruptible = data['interruptible']
+            if 'inactive_windows' in data:
+                appliance.inactive_windows = data['inactive_windows']
 
+            # Typ-specifické aktualizace
             if appliance.appliance_type == 'CYCLIC':
                 if 'standby_power' in data:
                     appliance.standby_power = data['standby_power']
@@ -393,10 +445,23 @@ def house_appliances(request, house_id):
                     appliance.usage_duration_min = data['usage_duration_min']
                 if 'usage_duration_max' in data:
                     appliance.usage_duration_max = data['usage_duration_max']
+                    
+                # Zajistíme, že všechna časová okna mají is_active
                 if 'weekday_hours' in data:
-                    appliance.weekday_hours = data['weekday_hours']
+                    weekday_hours = data['weekday_hours']
+                    if weekday_hours:
+                        for i, window in enumerate(weekday_hours):
+                            if 'is_active' not in window:
+                                weekday_hours[i]['is_active'] = True
+                    appliance.weekday_hours = weekday_hours
+                    
                 if 'weekend_hours' in data:
-                    appliance.weekend_hours = data['weekend_hours']
+                    weekend_hours = data['weekend_hours']
+                    if weekend_hours:
+                        for i, window in enumerate(weekend_hours):
+                            if 'is_active' not in window:
+                                weekend_hours[i]['is_active'] = True
+                    appliance.weekend_hours = weekend_hours
             
             elif appliance.appliance_type == 'CONSTANT':
                 appliance.standby_power = None
@@ -423,7 +488,10 @@ def house_appliances(request, house_id):
                 'is_active': appliance.is_active,
                 'in_standby': appliance.in_standby,
                 'remaining_minutes': appliance.remaining_minutes,
-                'next_start_time': appliance.next_start_time
+                'next_start_time': appliance.next_start_time,
+                'priority_level': appliance.priority_level,
+                'interruptible': appliance.interruptible,
+                'inactive_windows': appliance.inactive_windows
             })
             
         except Appliance.DoesNotExist:

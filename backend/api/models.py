@@ -131,6 +131,9 @@ class House(models.Model):
         verbose_name_plural = "Domy"
         
 
+from django.db import models
+from django.core.exceptions import ValidationError
+
 class Appliance(models.Model):
     """
     Model reprezentující spotřebič v domácnosti.
@@ -148,9 +151,17 @@ class Appliance(models.Model):
         ('ON_DEMAND', 'Spotřeba na vyžádání'),    # např. konvice
     ]
     
+    # Priorita spotřebiče pro vypínání při optimalizaci
+    PRIORITY_LEVELS = [
+        (1, 'Kritický - nikdy nevypínat'),
+        (2, 'Vysoká priorita - vypnout v krajní nouzi'),
+        (3, 'Střední priorita - možné vypnout při vysokých cenách'),
+        (4, 'Nízká priorita - vypnout jako první')
+    ]
+    
     # Základní pole
     house = models.ForeignKey(
-        House,
+        'House',
         on_delete=models.CASCADE,
         related_name='appliances',
         verbose_name="Dům"
@@ -167,6 +178,28 @@ class Appliance(models.Model):
         max_length=20,
         choices=APPLIANCE_TYPES,
         verbose_name="Typ spotřebiče"
+    )
+    
+    # Priorita spotřebiče pro vypínání
+    priority_level = models.IntegerField(
+        choices=PRIORITY_LEVELS,
+        default=1,
+        verbose_name="Priorita spotřebiče"
+    )
+    
+    # Možnost přerušení běhu
+    interruptible = models.BooleanField(
+        default=True,
+        verbose_name="Lze přerušit",
+        help_text="Zda je možné přerušit běh spotřebiče uprostřed cyklu"
+    )
+    
+    # Okna deaktivace pro CONSTANT a CYCLIC spotřebiče
+    inactive_windows = models.JSONField(
+        null=True,
+        blank=True,
+        verbose_name="Okna deaktivace",
+        help_text="Seznam časových oken, kdy je spotřebič vypnutý [{date: '2025-03-22', start_hour: 10, end_hour: 14}]"
     )
 
     # Stavové proměnné pro CYCLIC
@@ -221,13 +254,13 @@ class Appliance(models.Model):
         null=True,
         blank=True,
         verbose_name="Časová okna (pracovní den)",
-        help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int}]"
+        help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int, is_active: bool}]"
     )
     weekend_hours = models.JSONField(
         null=True,
         blank=True,
         verbose_name="Časová okna (víkend)",
-        help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int}]"
+        help_text="Seznam časových oken ve formátu [{start: int, end: int, probability: float, uses: int, is_active: bool}]"
     )
 
     def save(self, *args, **kwargs):
@@ -248,6 +281,22 @@ class Appliance(models.Model):
             self._reset_and_set_scheduled_fields()
         elif self.appliance_type == 'ON_DEMAND':
             self._reset_and_set_on_demand_fields()
+            
+        # Inicializace inactive_windows, pokud je None
+        if self.inactive_windows is None:
+            self.inactive_windows = []
+            
+        # Pro SCHEDULED a ON_DEMAND, zajistíme, že všechna časová okna mají is_active
+        if self.appliance_type in ['SCHEDULED', 'ON_DEMAND']:
+            if self.weekday_hours:
+                for i, window in enumerate(self.weekday_hours):
+                    if 'is_active' not in window:
+                        self.weekday_hours[i]['is_active'] = True
+                        
+            if self.weekend_hours:
+                for i, window in enumerate(self.weekend_hours):
+                    if 'is_active' not in window:
+                        self.weekend_hours[i]['is_active'] = True
 
         super().save(*args, **kwargs)
     

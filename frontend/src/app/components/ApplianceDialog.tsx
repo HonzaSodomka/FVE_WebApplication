@@ -67,7 +67,7 @@ export default function ApplianceDialog({
     weekday_hours: [],
     weekend_hours: [],
     priority_level: 1,
-    interruptible: true
+    interruptible: false
   });
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -100,7 +100,7 @@ export default function ApplianceDialog({
         weekday_hours: appliance.weekday_hours || [],
         weekend_hours: appliance.weekend_hours || [],
         priority_level: appliance.priority_level || 1,
-        interruptible: appliance.interruptible !== false // Pokud undefined nebo true, vrátí true
+        interruptible: appliance.interruptible === true // Pouze pokud je explicitně true
       });
     }
   }, [appliance]);
@@ -228,7 +228,7 @@ export default function ApplianceDialog({
           weekday_hours: [],
           weekend_hours: [],
           priority_level: 1,
-          interruptible: true
+          interruptible: false
         });
       }
     } catch (err) {

@@ -189,7 +189,7 @@ class Appliance(models.Model):
     
     # Možnost přerušení běhu
     interruptible = models.BooleanField(
-        default=True,
+        default=False,  # Změněno z True na False
         verbose_name="Lze přerušit",
         help_text="Zda je možné přerušit běh spotřebiče uprostřed cyklu"
     )

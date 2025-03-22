@@ -201,7 +201,7 @@ class Appliance(models.Model):
         null=True,
         blank=True,
         verbose_name="Okna deaktivace",
-        help_text="Seznam časových oken, kdy je spotřebič vypnutý [{date: '2025-03-22', start_hour: 10, end_hour: 14}]"
+        help_text="Seznam časových oken, kdy je spotřebič vypnutý [{start_date: '2025-03-22', end_date: '2025-03-23', start_hour: 23, end_hour: 1}]"
     )
 
     # Stavové proměnné pro CYCLIC

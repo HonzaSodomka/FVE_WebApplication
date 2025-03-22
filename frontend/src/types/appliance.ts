@@ -7,11 +7,11 @@ export interface TimeWindow {
 }
 
 export interface InactiveWindow {
-  date: string;
+  start_date: string;
+  end_date?: string;
   start_hour: number;
   end_hour: number;
 }
-
 export interface Appliance {
   id: number;
   name: string;

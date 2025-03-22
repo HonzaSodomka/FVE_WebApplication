@@ -138,19 +138,50 @@ def simulate_minute_consumption():
                 
                # Kontrola, zda aktuální čas odpovídá některému oknu neaktivity
                for window in inactive_windows:
-                   # Kontrola data
-                   window_date = window.get('date')
-                   if window_date and window_date != current_date.isoformat():
-                       continue
-                       
+                   # Formát s 'start_date' a 'end_date'
+                   start_date = window.get('start_date')
+                   end_date = window.get('end_date', start_date)  # Výchozí hodnota je start_date pokud end_date chybí
+                   
+                   # Pokud máme definovaná data, kontrolujeme, zda aktuální datum je v rozsahu
+                   start_date_obj = None
+                   end_date_obj = None
+                   
+                   if start_date:
+                       start_date_obj = datetime.strptime(start_date, '%Y-%m-%d').date()
+                   if end_date:
+                       end_date_obj = datetime.strptime(end_date, '%Y-%m-%d').date()
+                   
+                   # Kontrola, zda aktuální datum je v rozsahu
+                   if start_date_obj and end_date_obj:
+                       if not (start_date_obj <= current_date <= end_date_obj):
+                           continue
+                   elif start_date_obj:
+                       if current_date != start_date_obj:
+                           continue
+                   
                    # Kontrola hodin
                    start_hour = window.get('start_hour', 0)
                    end_hour = window.get('end_hour', 0)
                    
-                   if start_hour <= current_hour < end_hour:
-                       is_inactive = True
-                       logger.info(f"Spotřebič {appliance_id} ({app_type}) v domě {house_id} je vypnutý (čas {current_hour} je v neaktivním okně {start_hour}-{end_hour})")
-                       break
+                   # Speciální zpracování pro okna přes půlnoc
+                   if start_hour > end_hour:
+                       # Kontrola, zda jsme v první části okna (večer) nebo v druhé části (ráno)
+                       if current_date == start_date_obj and current_hour >= start_hour:
+                           # Jsme ve večerní části okna (první den)
+                           is_inactive = True
+                           logger.info(f"Spotřebič {appliance_id} ({app_type}) v domě {house_id} je vypnutý (čas {current_hour} je v neaktivním okně {start_hour}-{end_hour} přes půlnoc, večerní část)")
+                           break
+                       elif current_date == end_date_obj and current_hour < end_hour:
+                           # Jsme v ranní části okna (druhý den)
+                           is_inactive = True
+                           logger.info(f"Spotřebič {appliance_id} ({app_type}) v domě {house_id} je vypnutý (čas {current_hour} je v neaktivním okně {start_hour}-{end_hour} přes půlnoc, ranní část)")
+                           break
+                   else:
+                       # Standardní případ - v rámci jednoho dne
+                       if start_hour <= current_hour < end_hour:
+                           is_inactive = True
+                           logger.info(f"Spotřebič {appliance_id} ({app_type}) v domě {house_id} je vypnutý (čas {current_hour} je v neaktivním okně {start_hour}-{end_hour})")
+                           break
                
            # Spočítáme spotřebu pro každý typ spotřebiče
            if is_inactive:

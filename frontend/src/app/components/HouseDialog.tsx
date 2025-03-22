@@ -21,7 +21,7 @@ interface House {
   max_discharging_power: number;
   charging_efficiency: number;
   discharging_efficiency: number;
-  risk_level: 'LOW' | 'MEDIUM' | 'HIGH';
+  risk_level: "LOW" | "MEDIUM" | "HIGH" | "EXTREME";
   is_active: boolean;
 }
 
@@ -43,7 +43,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
     max_discharging_power: '',
     charging_efficiency: '90',
     discharging_efficiency: '90',
-    risk_level: 'MEDIUM' as 'LOW' | 'MEDIUM' | 'HIGH'
+    risk_level: 'MEDIUM' as 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
   });
   
   const [error, setError] = useState<string | null>(null);
@@ -60,6 +60,10 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
       max_level: 15
     },
     HIGH: {
+      min_battery_level: 5,
+      max_level: 10
+    },
+    EXTREME: {
       min_battery_level: 5,
       max_level: 10
     }
@@ -265,7 +269,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                 </label>
                 <Select 
                   value={formData.risk_level}
-                  onValueChange={(value: 'LOW' | 'MEDIUM' | 'HIGH') => 
+                  onValueChange={(value: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME') => 
                     setFormData({...formData, risk_level: value})
                   }
                 >
@@ -276,6 +280,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                     <SelectItem value="LOW">Nízké - Nabíjí i za vyšší ceny</SelectItem>
                     <SelectItem value="MEDIUM">Střední - Vyvážený přístup</SelectItem>
                     <SelectItem value="HIGH">Vysoké - Agresivní optimalizace ceny</SelectItem>
+                    <SelectItem value="EXTREME">Extrémní - Optimalizace s vypínáním spotřebičů</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -305,6 +310,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                     <li>Nízké riziko: 10% (maximálně 20%)</li>
                     <li>Střední riziko: 7.5% (maximálně 15%)</li>
                     <li>Vysoké riziko: 5% (maximálně 10%)</li>
+                    <li>Extrémní riziko: 5% (maximálně 10%)</li>
                   </ul>
                 </div>
               </div>

@@ -66,6 +66,7 @@ class House(models.Model):
         ('LOW', 'Nízké riziko'),       # Jistota energie za cenu vyšších nákladů
         ('MEDIUM', 'Střední riziko'),  # Vyvážený přístup
         ('HIGH', 'Vysoké riziko'),     # Agresivní optimalizace ceny s rizikem drahého dobíjení
+        ('EXTREME', 'Extrémní riziko'),# Agresivní optimalizace s vypínáním spotřebičů
     ]
 
     # Základní informace
@@ -112,7 +113,7 @@ class House(models.Model):
     
     # Rizikový profil pro optimalizaci nabíjení
     risk_level = models.CharField(
-        max_length=6,
+        max_length=7,  # Změněno z 6 na 7 kvůli délce "EXTREME"
         choices=RISK_LEVELS,
         default='MEDIUM',
         verbose_name="Úroveň rizika",
@@ -120,6 +121,7 @@ class House(models.Model):
             NÍZKÉ: Nabíjí i za vyšší ceny pro zajištění dostatku energie
             STŘEDNÍ: Vyvážený přístup mezi cenou a jistotou energie
             VYSOKÉ: Riskantní optimalizace ceny, možnost nutnosti drahého dobíjení
+            EXTRÉMNÍ: Maximální optimalizace ceny s vypínáním spotřebičů
         """
     )
     

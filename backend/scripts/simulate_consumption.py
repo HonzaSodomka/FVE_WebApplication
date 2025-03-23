@@ -285,18 +285,25 @@ def simulate_minute_consumption():
                        # Přerušíme běh, pokud je v neaktivním okně a je přerušitelný
                        minute_consumption = standby_power / 60 if standby_power else 0
                        logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (SCHEDULED): Přerušen běh v neaktivním okně (interruptible)")
+                       
+                       # Nastavíme remaining_minutes na 0 místo dekrementace
+                       cur.execute("""
+                           UPDATE api_appliance 
+                           SET remaining_minutes = 0
+                           WHERE id = %s
+                       """, [appliance_id])
                    else:
                        # Normální chování - spotřebič běží
                        variation = random.uniform(0.9, 1.0)
                        minute_consumption = (power * variation) / 60
                        logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): {minute_consumption}W/min (Zbývá: {remaining_minutes}min)")
-                   
-                   # Vždy snížíme remaining_minutes
-                   cur.execute("""
-                       UPDATE api_appliance 
-                       SET remaining_minutes = remaining_minutes - 1
-                       WHERE id = %s
-                   """, [appliance_id])
+                       
+                       # Snížíme remaining_minutes jen pokud neinterrumpujeme
+                       cur.execute("""
+                           UPDATE api_appliance 
+                           SET remaining_minutes = remaining_minutes - 1
+                           WHERE id = %s
+                       """, [appliance_id])
                else:
                    minute_consumption = standby_power / 60 if standby_power else 0
                    logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): {minute_consumption}W/min (Standby)")
@@ -465,10 +472,9 @@ def simulate_minute_consumption():
                # Zpracování běžících spotřebičů
                for mins in remaining_minutes_list:
                    if mins > 0:
-                       # Pokud je to přerušitelný spotřebič a měl by být přerušen, přeskočíme spotřebu
+                       # Pokud je to přerušitelný spotřebič a měl by být přerušen, přeskočíme spotřebu a nepřidáme do nového seznamu
                        if should_interrupt and interruptible:
-                           # Přidáme do seznamu se sníženou hodnotou
-                           new_remaining_minutes.append(mins - 1)
+                           # Nepřidáváme do seznamu - efektivně ukončíme běh
                            logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (ON_DEMAND): Přerušen běh v neaktivním okně (interruptible)")
                        else:
                            # Normální chování - spotřebič běží

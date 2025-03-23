@@ -63,6 +63,7 @@ def simulate_minute_consumption():
        current_date = current_time.date()
        current_time_str = current_time.strftime('%H:%M')
        current_hour = current_time.hour
+       current_minute = current_time.minute
        is_weekend = current_time.weekday() >= 5
        logger.info(f"Simuluji pro čas: {current_date} {current_time_str} ({'víkend' if is_weekend else 'pracovní den'})")
        
@@ -106,7 +107,8 @@ def simulate_minute_consumption():
                a.weekend_hours,
                a.remaining_minutes_list,
                a.planned_starts,
-               a.inactive_windows
+               a.inactive_windows,
+               a.interruptible
            FROM api_house h
            JOIN api_appliance a ON h.id = a.house_id
            WHERE h.is_active = true
@@ -120,7 +122,7 @@ def simulate_minute_consumption():
             in_standby, remaining_minutes, run_duration_min, run_duration_max, 
             pause_duration_min, pause_duration_max, next_start_time,
             usage_duration_min, usage_duration_max, weekday_hours, weekend_hours,
-            remaining_minutes_list, planned_starts, inactive_windows) in rows:
+            remaining_minutes_list, planned_starts, inactive_windows, interruptible) in rows:
            
            # Vytvoříme nový záznam pro dům pokud neexistuje
            if house_id not in houses:
@@ -248,10 +250,48 @@ def simulate_minute_consumption():
                    """, [appliance_id])
 
            elif app_type == 'SCHEDULED':
+               # NOVÁ FUNKCE - Kontrola, zda běžící spotřebič není v neaktivním okně
                if remaining_minutes > 0:
-                   variation = random.uniform(0.9, 1.0)
-                   minute_consumption = (power * variation) / 60
-                   logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): {minute_consumption}W/min (Zbývá: {remaining_minutes}min)")
+                   # Kontrola, zda je v neaktivním okně a zda je přerušitelný
+                   is_extreme_house = house_id in extreme_house_ids
+                   should_interrupt = False
+                   
+                   if is_extreme_house:
+                       # Kontrola, zda je běžící spotřebič v neaktivním okně
+                       windows = weekend_hours if is_weekend else weekday_hours
+                       if windows:
+                           for window in windows:
+                               # Kontrola, zda je aktuální hodina v tomto okně
+                               start_hour = window.get('start', 0)
+                               end_hour = window.get('end', 0)
+                               
+                               # Pro okna přes půlnoc
+                               if start_hour > end_hour:
+                                   # Jsme buď ve večerní nebo ranní části
+                                   if (current_hour >= start_hour) or (current_hour < end_hour):
+                                       # Kontrola, zda je okno neaktivní
+                                       if not window.get('is_active', True):
+                                           should_interrupt = True
+                                           break
+                               else:
+                                   # Standardní případ v rámci jednoho dne
+                                   if start_hour <= current_hour < end_hour:
+                                       # Kontrola, zda je okno neaktivní
+                                       if not window.get('is_active', True):
+                                           should_interrupt = True
+                                           break
+                   
+                   if should_interrupt and interruptible:
+                       # Přerušíme běh, pokud je v neaktivním okně a je přerušitelný
+                       minute_consumption = standby_power / 60 if standby_power else 0
+                       logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (SCHEDULED): Přerušen běh v neaktivním okně (interruptible)")
+                   else:
+                       # Normální chování - spotřebič běží
+                       variation = random.uniform(0.9, 1.0)
+                       minute_consumption = (power * variation) / 60
+                       logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): {minute_consumption}W/min (Zbývá: {remaining_minutes}min)")
+                   
+                   # Vždy snížíme remaining_minutes
                    cur.execute("""
                        UPDATE api_appliance 
                        SET remaining_minutes = remaining_minutes - 1
@@ -261,52 +301,130 @@ def simulate_minute_consumption():
                    minute_consumption = standby_power / 60 if standby_power else 0
                    logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): {minute_consumption}W/min (Standby)")
 
+                   # UPRAVENO: Kontrola is_active u okna při spuštění spotřebiče
                    if next_start_time and current_time.replace(tzinfo=None) == next_start_time.replace(tzinfo=None):
-                       duration = random.randint(usage_duration_min, usage_duration_max)
-                       cur.execute("""
-                           UPDATE api_appliance 
-                           SET remaining_minutes = %s,
-                               next_start_time = NULL
-                           WHERE id = %s
-                       """, [duration, appliance_id])
-                       logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): Spuštěn běh na {duration}min")
+                       # Kontrola, zda okno je aktivní (pouze pro EXTREME domy)
+                       is_extreme_house = house_id in extreme_house_ids
+                       should_skip = False
+                       
+                       if is_extreme_house:
+                           windows = weekend_hours if is_weekend else weekday_hours
+                           if windows:
+                               for window in windows:
+                                   # Zjistit, do kterého okna patří aktuální čas
+                                   start_hour = window.get('start', 0)
+                                   end_hour = window.get('end', 0)
+                                   
+                                   # Pro okna přes půlnoc
+                                   if start_hour > end_hour:
+                                       # Jsme buď ve večerní nebo ranní části
+                                       if (current_hour >= start_hour) or (current_hour < end_hour):
+                                           # Kontrola, zda je okno neaktivní
+                                           if not window.get('is_active', True):
+                                               should_skip = True
+                                               logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (SCHEDULED): Přeskakuji naplánované spuštění v {current_time_str}, okno je neaktivní")
+                                               break
+                                   else:
+                                       # Standardní případ v rámci jednoho dne
+                                       if start_hour <= current_hour < end_hour:
+                                           # Kontrola, zda je okno neaktivní
+                                           if not window.get('is_active', True):
+                                               should_skip = True
+                                               logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (SCHEDULED): Přeskakuji naplánované spuštění v {current_time_str}, okno je neaktivní")
+                                               break
+                       
+                       # Pouze pokud nemáme přeskočit, spustíme spotřebič
+                       if not should_skip:
+                           duration = random.randint(usage_duration_min, usage_duration_max)
+                           cur.execute("""
+                               UPDATE api_appliance 
+                               SET remaining_minutes = %s,
+                                   next_start_time = NULL
+                               WHERE id = %s
+                           """, [duration, appliance_id])
+                           logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): Spuštěn běh na {duration}min")
+                       else:
+                           # Pouze vynulujeme next_start_time
+                           cur.execute("""
+                               UPDATE api_appliance 
+                               SET next_start_time = NULL
+                               WHERE id = %s
+                           """, [appliance_id])
+                           logger.info(f"Spotřebič {appliance_id} (SCHEDULED): Naplánované spuštění přeskočeno (neaktivní okno)")
 
-               if current_time.minute == 59:
-                   next_hour = (current_time.hour + 1) % 24
+               # NOVÝ KÓD - Kontrola pro EXTREME domy, zda jsme minutu po konci neaktivního okna
+               if current_minute == 1 and house_id in extreme_house_ids:
+                   windows = weekend_hours if is_weekend else weekday_hours
+                   if windows:
+                       changed = False
+                       for i, window in enumerate(windows):
+                           # Kontrola, zda jsme minutu po konci okna a zda je okno neaktivní
+                           end_hour = window.get('end', 0)
+                           is_window_active = window.get('is_active', True)
+                           
+                           if not is_window_active and current_hour == end_hour:
+                               # Aktivujeme okno
+                               windows[i]['is_active'] = True
+                               changed = True
+                               logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (SCHEDULED): Okno {window['start']}:00-{window['end']}:00 znovu aktivováno v {current_hour}:01")
+                       
+                       if changed:
+                           # Uložíme změněná data zpět do databáze
+                           update_field = 'weekend_hours' if is_weekend else 'weekday_hours'
+                           cur.execute(f"""
+                               UPDATE api_appliance 
+                               SET {update_field} = %s::jsonb
+                               WHERE id = %s
+                           """, [json.dumps(windows), appliance_id])
+
+               # Plánování na další hodinu (v 59. minutě)
+               if current_minute == 59:
+                   next_hour = (current_hour + 1) % 24
                    windows = weekend_hours if is_weekend else weekday_hours
                    
                    if windows:
-                       for window in windows:
-                           if window['start'] == next_hour and random.random() < window['probability']:
-                               start_minutes = window['start'] * 60
-                               end_minutes = window['end'] * 60
-                               if end_minutes < start_minutes:
-                                   end_minutes += 24 * 60
-
-                               if remaining_minutes > 0:
-                                   earliest_start = start_minutes + remaining_minutes
-                                   if earliest_start < end_minutes:
-                                       random_minute = random.randint(earliest_start, end_minutes)
-                                   else:
-                                       continue
-                               else:
-                                   random_minute = random.randint(start_minutes, end_minutes)
-
-                               target_hour = (random_minute // 60) % 24
-                               target_minute = random_minute % 60
+                       for i, window in enumerate(windows):
+                           if window['start'] == next_hour:
+                               # EXTREME logika pro kontrolu is_active u SCHEDULED
+                               is_extreme_house = house_id in extreme_house_ids
+                               is_window_active = window.get('is_active', True)
                                
-                               next_start = current_time.replace(
-                                   hour=target_hour,
-                                   minute=target_minute
-                               )
+                               if is_extreme_house and not is_window_active:
+                                   # Pro neaktivní okno pouze přeskočíme plánování
+                                   logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (SCHEDULED): Přeskakuji plánování pro neaktivní okno {window['start']}:00-{window['end']}:00")
+                                   continue  # Přeskočíme plánování pro toto okno
+                               
+                               # Původní logika pro plánování
+                               if random.random() < window['probability']:
+                                   start_minutes = window['start'] * 60
+                                   end_minutes = window['end'] * 60
+                                   if end_minutes < start_minutes:
+                                       end_minutes += 24 * 60
 
-                               cur.execute("""
-                                   UPDATE api_appliance 
-                                   SET next_start_time = %s
-                                   WHERE id = %s
-                               """, [next_start, appliance_id])
-                               logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): Naplánován na {next_start}")
-                               break
+                                   if remaining_minutes > 0:
+                                       earliest_start = start_minutes + remaining_minutes
+                                       if earliest_start < end_minutes:
+                                           random_minute = random.randint(earliest_start, end_minutes)
+                                       else:
+                                           continue
+                                   else:
+                                       random_minute = random.randint(start_minutes, end_minutes)
+
+                                   target_hour = (random_minute // 60) % 24
+                                   target_minute = random_minute % 60
+                                   
+                                   next_start = current_time.replace(
+                                       hour=target_hour,
+                                       minute=target_minute
+                                   )
+
+                                   cur.execute("""
+                                       UPDATE api_appliance 
+                                       SET next_start_time = %s
+                                       WHERE id = %s
+                                   """, [next_start, appliance_id])
+                                   logger.debug(f"Spotřebič {appliance_id} (SCHEDULED): Naplánován na {next_start}")
+                                   break
 
            elif app_type == 'ON_DEMAND':
                remaining_minutes_list = [] if remaining_minutes_list is None else remaining_minutes_list
@@ -315,31 +433,119 @@ def simulate_minute_consumption():
                minute_consumption = 0
                new_remaining_minutes = []
                
+               # NOVÁ FUNKCE - Kontrola, zda běžící spotřebiče nejsou v neaktivním okně
+               is_extreme_house = house_id in extreme_house_ids
+               should_interrupt = False
+               
+               if is_extreme_house:
+                   # Kontrola, zda je běžící spotřebič v neaktivním okně
+                   windows = weekend_hours if is_weekend else weekday_hours
+                   if windows:
+                       for window in windows:
+                           # Kontrola, zda je aktuální hodina v tomto okně
+                           start_hour = window.get('start', 0)
+                           end_hour = window.get('end', 0)
+                           
+                           # Pro okna přes půlnoc
+                           if start_hour > end_hour:
+                               # Jsme buď ve večerní nebo ranní části
+                               if (current_hour >= start_hour) or (current_hour < end_hour):
+                                   # Kontrola, zda je okno neaktivní
+                                   if not window.get('is_active', True):
+                                       should_interrupt = True
+                                       break
+                           else:
+                               # Standardní případ v rámci jednoho dne
+                               if start_hour <= current_hour < end_hour:
+                                   # Kontrola, zda je okno neaktivní
+                                   if not window.get('is_active', True):
+                                       should_interrupt = True
+                                       break
+               
+               # Zpracování běžících spotřebičů
                for mins in remaining_minutes_list:
                    if mins > 0:
-                       variation = random.uniform(0.9, 1.0)
-                       minute_consumption += (power * variation) / 60
-                       new_remaining_minutes.append(mins - 1)
-               
+                       # Pokud je to přerušitelný spotřebič a měl by být přerušen, přeskočíme spotřebu
+                       if should_interrupt and interruptible:
+                           # Přidáme do seznamu se sníženou hodnotou
+                           new_remaining_minutes.append(mins - 1)
+                           logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (ON_DEMAND): Přerušen běh v neaktivním okně (interruptible)")
+                       else:
+                           # Normální chování - spotřebič běží
+                           variation = random.uniform(0.9, 1.0)
+                           minute_consumption += (power * variation) / 60
+                           new_remaining_minutes.append(mins - 1)
+                   
                new_planned_starts = []
                current_time_str_full = current_time.strftime('%Y-%m-%d %H:%M:%S')
                
+               # UPRAVENO: Kontrola is_active u okna při spuštění spotřebiče
                for start in planned_starts:
                    if start == current_time_str_full:
-                       duration = random.randint(usage_duration_min, usage_duration_max)
-                       new_remaining_minutes.append(duration)
-                       logger.debug(f"Spotřebič {appliance_id} (ON_DEMAND): Spuštěn nový běh na {duration}min")
+                       # Kontrola, zda okno je aktivní (pouze pro EXTREME domy)
+                       should_skip = False
+                       
+                       if is_extreme_house:
+                           # V tomto případě již víme, zda jsme v neaktivním okně díky předchozí kontrole
+                           if should_interrupt:
+                               should_skip = True
+                               logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (ON_DEMAND): Přeskakuji naplánované spuštění v {current_time_str}, okno je neaktivní")
+                       
+                       # Pouze pokud nemáme přeskočit, spustíme spotřebič
+                       if not should_skip:
+                           duration = random.randint(usage_duration_min, usage_duration_max)
+                           new_remaining_minutes.append(duration)
+                           logger.debug(f"Spotřebič {appliance_id} (ON_DEMAND): Spuštěn nový běh na {duration}min")
+                       else:
+                           logger.info(f"Spotřebič {appliance_id} (ON_DEMAND): Naplánované spuštění přeskočeno (neaktivní okno)")
+                           # Plánovaný start se přeskočí a do new_planned_starts se nepřidá
                    else:
                        new_planned_starts.append(start)
 
-               if current_time.minute == 59:
-                   next_hour = (current_time.hour + 1) % 24
+               # NOVÝ KÓD - Kontrola pro EXTREME domy, zda jsme minutu po konci neaktivního okna
+               if current_minute == 1 and house_id in extreme_house_ids:
+                   windows = weekend_hours if is_weekend else weekday_hours
+                   if windows:
+                       changed = False
+                       for i, window in enumerate(windows):
+                           # Kontrola, zda jsme minutu po konci okna a zda je okno neaktivní
+                           end_hour = window.get('end', 0)
+                           is_window_active = window.get('is_active', True)
+                           
+                           if not is_window_active and current_hour == end_hour:
+                               # Aktivujeme okno
+                               windows[i]['is_active'] = True
+                               changed = True
+                               logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (ON_DEMAND): Okno {window['start']}:00-{window['end']}:00 znovu aktivováno v {current_hour}:01")
+                       
+                       if changed:
+                           # Uložíme změněná data zpět do databáze
+                           update_field = 'weekend_hours' if is_weekend else 'weekday_hours'
+                           cur.execute(f"""
+                               UPDATE api_appliance 
+                               SET {update_field} = %s::jsonb
+                               WHERE id = %s
+                           """, [json.dumps(windows), appliance_id])
+
+               # Plánování na další hodinu (v 59. minutě)
+               if current_minute == 59:
+                   next_hour = (current_hour + 1) % 24
                    windows = weekend_hours if is_weekend else weekday_hours
                    
                    if windows:
-                       for window in windows:
+                       for i, window in enumerate(windows):
                            if window['start'] == next_hour:
-                               for _ in range(window['uses']):
+                               # EXTREME logika pro kontrolu is_active u ON_DEMAND
+                               is_extreme_house = house_id in extreme_house_ids
+                               is_window_active = window.get('is_active', True)
+                               
+                               if is_extreme_house and not is_window_active:
+                                   # Pro neaktivní okno pouze přeskočíme plánování
+                                   logger.info(f"EXTREME dům {house_id}, spotřebič {appliance_id} (ON_DEMAND): Přeskakuji plánování pro neaktivní okno {window['start']}:00-{window['end']}:00")
+                                   continue  # Přeskočíme plánování pro toto okno
+                               
+                               # Původní logika pro plánování
+                               for _ in range(window.get('uses', 1)):
                                    if random.random() < window['probability']:
                                        start_minutes = window['start'] * 60
                                        end_minutes = window['end'] * 60

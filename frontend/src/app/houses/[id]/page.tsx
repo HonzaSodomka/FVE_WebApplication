@@ -30,7 +30,7 @@ interface House {
   max_discharging_power: number;
   charging_efficiency: number;
   discharging_efficiency: number;
-  risk_level: "LOW" | "MEDIUM" | "HIGH";
+  risk_level: "LOW" | "MEDIUM" | "HIGH" | "EXTREME";
 }
 
 interface DailyStats {
@@ -391,16 +391,18 @@ export default function Page() {
                           LOW: "bg-green-100 text-green-800",
                           MEDIUM: "bg-yellow-100 text-yellow-800",
                           HIGH: "bg-red-100 text-red-800",
+                          EXTREME: "bg-purple-100 text-purple-800", // Přidána podpora pro EXTREME úroveň rizika
                         }[house.risk_level]
                       }`}
-                    >
-                      {
+                      >
                         {
-                          LOW: "Nízká - bezpečnější nabíjení",
-                          MEDIUM: "Střední - vyvážený přístup",
-                          HIGH: "Vysoká - agresivní optimalizace",
-                        }[house.risk_level]
-                      }
+                          {
+                            LOW: "Nízké - Nabíjí i za vyšší ceny",
+                            MEDIUM: "Střední - Vyvážený přístup",
+                            HIGH: "Vysoké - Agresivní optimalizace ceny",
+                            EXTREME: "Extrémní - Optimalizace s vypínáním spotřebičů", // Konzistentní text
+                          }[house.risk_level]
+                        }
                     </span>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4">

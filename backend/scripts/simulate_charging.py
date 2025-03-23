@@ -321,17 +321,15 @@ def simulate_combined_charging():
                         grid_charging_cost  # Náklady (počítáno z energie před účinností)
                     ))
                     
-                    logger.info(f"""
-                        Dům {house_id} CELKOVÉ nabíjení:
-                        - Datum a čas: {current_date} {current_hour:02d}:{current_minute:02d}
-                        - Ze solárů: {usable_solar_kwh:.4f} kWh (před účinností) -> {actual_solar_charge_kwh:.4f} kWh (po účinnosti)
-                        - Ze sítě (nouzové): {usable_emergency_kwh:.4f} kWh -> {actual_emergency_charge_kwh:.4f} kWh
-                        - Ze sítě (plánované): {usable_planned_kwh:.4f} kWh -> {actual_planned_charge_kwh:.4f} kWh
-                        - Celkem nabito: {total_actual_charge_kwh:.4f} kWh
-                        - Cena nabíjení ze sítě: {grid_charging_cost:.2f} Kč
-                        - Stav baterie: {current_level:.2f} kWh -> {new_level:.2f} kWh ({new_level/battery_capacity*100:.1f}%)
-                        - Kapacita baterie: {battery_capacity:.2f} kWh
-                    """)
+                    logger.info(f"Dům {house_id} CELKOVÉ nabíjení: "
+                                f"Datum a čas: {current_date} {current_hour:02d}:{current_minute:02d}, "
+                                f"Ze solárů: {usable_solar_kwh:.4f} kWh (před účinností) -> {actual_solar_charge_kwh:.4f} kWh (po účinnosti), "
+                                f"Ze sítě (nouzové): {usable_emergency_kwh:.4f} kWh -> {actual_emergency_charge_kwh:.4f} kWh, "
+                                f"Ze sítě (plánované): {usable_planned_kwh:.4f} kWh -> {actual_planned_charge_kwh:.4f} kWh, "
+                                f"Celkem nabito: {total_actual_charge_kwh:.4f} kWh, "
+                                f"Cena nabíjení ze sítě: {grid_charging_cost:.2f} Kč, "
+                                f"Stav baterie: {current_level:.2f} kWh -> {new_level:.2f} kWh ({new_level/battery_capacity*100:.1f}%), "
+                                f"Kapacita baterie: {battery_capacity:.2f} kWh")
                 else:
                     logger.info(f"Dům {house_id}: Žádné nabíjení neproběhlo v čase {current_time}")
 

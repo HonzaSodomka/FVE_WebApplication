@@ -1,3 +1,4 @@
+import json
 import psycopg2
 import logging
 from datetime import datetime, timedelta
@@ -421,6 +422,250 @@ def get_consumption_prediction(house_id, current_hour, have_tomorrow_prices=Fals
         if 'conn' in locals():
             conn.close()
 
+def get_potential_savings(house_id, priority_level, current_hour, have_tomorrow_prices=False):
+    """
+    Získá předpověď potenciálních úspor vypnutím spotřebičů s danou prioritou.
+    
+    Args:
+        house_id: ID domu
+        priority_level: Úroveň priority spotřebičů (2, 3 nebo 4)
+        current_hour: Aktuální hodina dne (0-23)
+        have_tomorrow_prices: Zda jsou k dispozici ceny na zítřek
+        
+    Returns:
+        Seznam objektů s potenciálními úsporami pro každou hodinu v plánovacím horizontu
+    """
+    try:
+        conn = psycopg2.connect(
+            dbname="fve_db",
+            user="postgres",
+            password="heslo",
+            host="db"
+        )
+        cur = conn.cursor()
+        
+        current_time = datetime.now()
+        today = current_time.date()
+        tomorrow = today + timedelta(days=1)
+        
+        # Získáme údaje o spotřebičích daného domu s danou prioritou
+        cur.execute("""
+            SELECT 
+                id, power_consumption, appliance_type, standby_power
+            FROM api_appliance 
+            WHERE house_id = %s 
+                AND priority_level = %s 
+                AND appliance_type IN ('CONSTANT', 'CYCLIC')
+        """, [house_id, priority_level])
+        
+        appliances = cur.fetchall()
+        
+        if not appliances:
+            return []
+        
+        # Vytvoříme pole s potenciálními úsporami po hodinách
+        savings_data = []
+        index = 0
+        
+        # Pro dnešek od aktuální hodiny
+        for hour in range(current_hour, 24):
+            savings_kwh = 0
+            
+            for appliance_id, power, app_type, standby in appliances:
+                if app_type == 'CONSTANT':
+                    # Pro konstantní spotřebiče jednoduše vezmeme jejich spotřebu
+                    savings_kwh += power / 1000  # Převod na kWh
+                elif app_type == 'CYCLIC':
+                    # Pro cyklické spotřebiče 50% času aktivní a 50% standby (zjednodušení)
+                    standby_power = standby if standby else 0
+                    avg_power = (power * 0.5 + standby_power * 0.5) / 1000  # Převod na kWh
+                    savings_kwh += avg_power
+            
+            savings_data.append({
+                'date': today,
+                'hour': hour,
+                'savings_kwh': savings_kwh,
+                'index': index
+            })
+            index += 1
+            
+        # Pro zítřek všechny hodiny, jen pokud máme ceny na zítřek
+        if have_tomorrow_prices:
+            for hour in range(24):
+                savings_kwh = 0
+                
+                for appliance_id, power, app_type, standby in appliances:
+                    if app_type == 'CONSTANT':
+                        savings_kwh += power / 1000
+                    elif app_type == 'CYCLIC':
+                        standby_power = standby if standby else 0
+                        avg_power = (power * 0.5 + standby_power * 0.5) / 1000
+                        savings_kwh += avg_power
+                
+                savings_data.append({
+                    'date': tomorrow,
+                    'hour': hour,
+                    'savings_kwh': savings_kwh,
+                    'index': index
+                })
+                index += 1
+        
+        return savings_data
+        
+    except Exception as e:
+        logger.error(f"Chyba při získávání potenciálních úspor: {str(e)}")
+        return []
+    finally:
+        if 'cur' in locals():
+            cur.close()
+        if 'conn' in locals():
+            conn.close()
+
+def window_overlaps(time_window, start_hour, end_hour):
+    """
+    Kontroluje, zda se časové okno překrývá s neaktivním oknem.
+    
+    Args:
+        time_window: Časové okno z weekday_hours nebo weekend_hours
+        start_hour: Počáteční hodina neaktivního okna
+        end_hour: Koncová hodina neaktivního okna
+        
+    Returns:
+        Boolean: True pokud se okna překrývají
+    """
+    window_start = time_window['start']
+    window_end = time_window['end']
+    
+    # Speciální zpracování pro okna přes půlnoc
+    if window_end < window_start:
+        window_end += 24
+    if end_hour < start_hour:
+        end_hour += 24
+    
+    # Kontrola překrytí (aspoň částečné)
+    return not (window_end <= start_hour or window_start >= end_hour)
+    
+def apply_inactive_window(house_id, priority_level, inactive_window):
+    """
+    Aplikuje neaktivní okno na všechny spotřebiče dané priority v domě.
+    
+    Args:
+        house_id: ID domu
+        priority_level: Úroveň priority spotřebičů (2, 3 nebo 4)
+        inactive_window: Slovník s definicí časového okna 
+                        {'start_date', 'end_date', 'start_hour', 'end_hour'}
+    """
+    try:
+        conn = psycopg2.connect(
+            dbname="fve_db",
+            user="postgres",
+            password="heslo",
+            host="db"
+        )
+        cur = conn.cursor()
+        
+        # Získáme všechny spotřebiče dané priority
+        cur.execute("""
+            SELECT 
+                id, appliance_type, inactive_windows, weekday_hours, weekend_hours
+            FROM api_appliance 
+            WHERE house_id = %s 
+                AND priority_level = %s
+        """, [house_id, priority_level])
+        
+        appliances = cur.fetchall()
+        
+        if not appliances:
+            logger.info(f"Žádné spotřebiče s prioritou {priority_level} nebyly nalezeny v domě {house_id}")
+            return
+        
+        updated_constant_cyclic = 0
+        updated_scheduled_ondemand = 0
+        
+        # Převedeme časové okno na date objekty pro kontrolu, zda jde o víkend nebo pracovní den
+        start_date = datetime.strptime(inactive_window['start_date'], '%Y-%m-%d').date()
+        end_date = datetime.strptime(inactive_window['end_date'], '%Y-%m-%d').date()
+        start_hour = inactive_window['start_hour']
+        end_hour = inactive_window['end_hour']
+        
+        # Určíme, zda jde o víkend nebo pracovní den
+        is_start_weekend = start_date.weekday() >= 5  # 5 = sobota, 6 = neděle
+        is_end_weekend = end_date.weekday() >= 5
+        
+        # Pro každý spotřebič aplikujeme neaktivní okno podle typu
+        for appliance_id, app_type, current_windows, weekday_hours, weekend_hours in appliances:
+            if app_type in ['CONSTANT', 'CYCLIC']:
+                # Pro konstantní a cyklické spotřebiče přidáme nové inactive_window
+                if current_windows is None:
+                    current_windows = []
+                
+                # Přidáme nové okno
+                current_windows.append(inactive_window)
+                
+                # Aktualizujeme spotřebič
+                cur.execute("""
+                    UPDATE api_appliance
+                    SET inactive_windows = %s
+                    WHERE id = %s
+                """, [json.dumps(current_windows), appliance_id])
+                
+                updated_constant_cyclic += 1
+                
+            elif app_type in ['SCHEDULED', 'ON_DEMAND']:
+                # Pro plánované a on-demand spotřebiče deaktivujeme existující časová okna
+                weekday_updated = False
+                weekend_updated = False
+                
+                # Zpracování pro pracovní dny
+                if weekday_hours and (not is_start_weekend or not is_end_weekend):
+                    modified_weekday_hours = weekday_hours.copy()
+                    for i, window in enumerate(modified_weekday_hours):
+                        # Kontrola, zda okno překrývá neaktivní okno
+                        if window_overlaps(window, start_hour, end_hour):
+                            modified_weekday_hours[i]['is_active'] = False
+                            weekday_updated = True
+                    
+                    if weekday_updated:
+                        cur.execute("""
+                            UPDATE api_appliance
+                            SET weekday_hours = %s
+                            WHERE id = %s
+                        """, [json.dumps(modified_weekday_hours), appliance_id])
+                
+                # Zpracování pro víkendy
+                if weekend_hours and (is_start_weekend or is_end_weekend):
+                    modified_weekend_hours = weekend_hours.copy()
+                    for i, window in enumerate(modified_weekend_hours):
+                        # Kontrola, zda okno překrývá neaktivní okno
+                        if window_overlaps(window, start_hour, end_hour):
+                            modified_weekend_hours[i]['is_active'] = False
+                            weekend_updated = True
+                    
+                    if weekend_updated:
+                        cur.execute("""
+                            UPDATE api_appliance
+                            SET weekend_hours = %s
+                            WHERE id = %s
+                        """, [json.dumps(modified_weekend_hours), appliance_id])
+                
+                if weekday_updated or weekend_updated:
+                    updated_scheduled_ondemand += 1
+        
+        conn.commit()
+        logger.info(f"Úspěšně aplikováno neaktivní okno:")
+        logger.info(f"- {updated_constant_cyclic} spotřebičů typu CONSTANT/CYCLIC")
+        logger.info(f"- {updated_scheduled_ondemand} spotřebičů typu SCHEDULED/ON_DEMAND")
+        
+    except Exception as e:
+        logger.error(f"Chyba při aplikování neaktivního okna: {str(e)}")
+        if 'conn' in locals():
+            conn.rollback()
+    finally:
+        if 'cur' in locals():
+            cur.close()
+        if 'conn' in locals():
+            conn.close()
+
 def get_historical_price_categories(days=30):
     """
     Získá historická data o cenách a vypočítá percentilové prahy pro kategorizaci.
@@ -527,21 +772,7 @@ def categorize_price(price, categories):
 def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, price_data):
     """
     Optimalizace nabíjení podle cenově-efektivního přístupu.
-    
-    Pro každou hodinu chronologicky:
-    1. Kontroluje, zda baterie neklesne pod minimální úroveň (high target level)
-    2. Pokud klesne, řeší to nabíjením v nejlevnějších předchozích hodinách
-    3. Poté plánuje nabíjení pro splnění cílové úrovně podle kategorie cen
-    
-    Args:
-        house_id: ID domu
-        house_data: Objekt s parametry domu
-        solar_data: Pole s predikcí solární výroby pro každou hodinu
-        consumption_data: Pole s predikcí spotřeby pro každou hodinu
-        price_data: Pole s cenami elektřiny pro každou hodinu
-    
-    Returns:
-        Seznam s plánem nabíjení pro každou hodinu
+    Pro EXTREME domy zahrnuje možnost vypínání spotřebičů k optimalizaci nákladů.
     """
     try:
         logger.info(f"ZAČÁTEK OPTIMALIZACE NABÍJENÍ PRO DŮM {house_id}")
@@ -573,6 +804,12 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 'high': 0.15            # 15% kapacity
             },
             'HIGH': {
+                'extremely_low': 0.50,  # 50% kapacity baterie
+                'low': 0.35,            # 35% kapacity
+                'average': 0.25,        # 25% kapacity
+                'high': 0.10            # 10% kapacity
+            },
+            'EXTREME': {
                 'extremely_low': 0.50,  # 50% kapacity baterie
                 'low': 0.35,            # 35% kapacity
                 'average': 0.25,        # 25% kapacity
@@ -845,6 +1082,93 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
             
             logger.info(f"Zpracovávám hodinu {current_hour['hour']}:00 s cenou {current_hour['price']:.2f} Kč/kWh (kategorie: {current_hour['price_category']}, základní cíl: {current_hour['base_target_percentage']:.1f}%, cíl s rezervou: {current_hour['target_percentage']:.1f}%)")
             
+            # Pokud jsme v drahé kategorii a je to EXTREME dům, zkusíme nejdřív vypnout spotřebiče
+            if current_hour['price_category'] == 'high' and house_data['risk_level'] == 'EXTREME':
+                logger.info(f"Hodina {current_hour['hour']}:00 má vysokou cenu a je EXTREME dům, zkouším optimalizaci vypnutím spotřebičů")
+                
+                # 1. Zjistíme kolik energie potřebujeme pro dosažení cíle
+                current_levels = simulate_battery_levels(charging_plan)
+                end_level = current_levels[-1]['level']
+                energy_needed = max(0, base_target - end_level) / (house_data['charging_efficiency'] / 100)
+                
+                if energy_needed > 0:
+                    logger.info(f"Potřebujeme dobít {energy_needed:.2f} kWh pro dosažení cíle")
+                    
+                    # 2. Zkusíme postupně vypínat spotřebiče podle priority
+                    energy_saved_total = 0
+                    consumption_data_modified = False
+                    
+                    for priority_level in [4, 3, 2]:  # Od nejnižší po nejvyšší prioritu
+                        if energy_saved_total >= energy_needed:
+                            break  # Pokud jsme už ušetřili dost, končíme
+                            
+                        logger.info(f"Zkouším vypnout spotřebiče s prioritou {priority_level}")
+                        
+                        # 3. Postupně rozšiřujeme okno (1-4 hodiny dozadu)
+                        for window_size in range(1, 5):
+                            if energy_saved_total >= energy_needed:
+                                break  # Pokud jsme už ušetřili dost, končíme
+                                
+                            # Vypočítáme začátek okna (max 4 hodiny dozadu)
+                            start_idx = max(0, hour_idx - window_size + 1)
+                            
+                            logger.info(f"Rozšiřuji okno na {window_size} hodin (od indexu {start_idx} do {hour_idx})")
+                            
+                            # 4. Získáme potenciální úspory pro toto okno a prioritu
+                            potential_savings = get_potential_savings(
+                                house_id, 
+                                priority_level, 
+                                current_hour=price_data[start_idx]['hour'],
+                                have_tomorrow_prices=(len(price_data) > 24)
+                            )
+                            
+                            # Filtrujeme jen úspory v našem okně
+                            window_savings = [s for s in potential_savings if start_idx <= s['index'] <= hour_idx]
+                            total_window_savings = sum(s['savings_kwh'] for s in window_savings)
+                            
+                            if total_window_savings > 0:
+                                logger.info(f"Nalezeno {total_window_savings:.2f} kWh úspor vypnutím spotřebičů priority {priority_level} v okně {window_size} hodin")
+                                
+                                # 5. Aplikujeme úspory - vytvoříme neaktivní okno pro spotřebiče
+                                start_date = price_data[start_idx]['date']
+                                end_date = price_data[hour_idx]['date']
+                                start_hour = price_data[start_idx]['hour']
+                                end_hour = price_data[hour_idx]['hour'] + 1  # +1 protože end_hour je exkluzivní
+                                
+                                inactive_window = {
+                                    'start_date': start_date.strftime('%Y-%m-%d'),
+                                    'end_date': end_date.strftime('%Y-%m-%d'),
+                                    'start_hour': start_hour,
+                                    'end_hour': end_hour
+                                }
+                                
+                                apply_inactive_window(house_id, priority_level, inactive_window)
+                                
+                                # 6. Aktualizujeme předpověď spotřeby
+                                for sav in window_savings:
+                                    for i, cons in enumerate(consumption_data):
+                                        if cons['index'] == sav['index']:
+                                            consumption_data[i]['consumption_kwh'] -= sav['savings_kwh']
+                                            consumption_data_modified = True
+                                
+                                energy_saved_total += total_window_savings
+                                
+                                logger.info(f"Aktualizována předpověď spotřeby, ušetřeno celkem {energy_saved_total:.2f} kWh")
+                    
+                    # 7. Po úpravě spotřeby znovu simulujeme stav baterie
+                    if consumption_data_modified:
+                        current_levels = simulate_battery_levels(charging_plan)
+                        end_level = current_levels[-1]['level']
+                        logger.info(f"Po vypnutí spotřebičů bude končený stav baterie {end_level:.2f} kWh")
+                        
+                        # Zkontrolujeme, zda stále potřebujeme nabíjet v této hodině
+                        if end_level >= base_target:
+                            logger.info(f"Vypnutí spotřebičů vyřešilo problém, není potřeba nabíjet v drahé hodině {current_hour['hour']}:00")
+                            continue  # Přeskočíme tuto hodinu a přejdeme k další
+                        else:
+                            logger.info(f"I po vypnutí spotřebičů je stále potřeba nabíjet v drahé hodině {current_hour['hour']}:00")
+                            # Pokračujeme standardním algoritmem nabíjení pro tuto hodinu
+            
             # 1. Zjistíme, jaký bude stav baterie na konci období s aktuálním plánem
             current_levels = simulate_battery_levels(charging_plan)
             end_level = current_levels[-1]['level']
@@ -962,7 +1286,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 })
                 
                 logger.warning(f"PŘETRVÁVAJÍCÍ KRITICKÁ HODINA: {level['date']} {level['hour']}:00 - Stav baterie: {level['level']:.2f} kWh, " +
-                             f"Minimální požadavek: {high_target_level:.2f} kWh, Deficit: {energy_deficit:.2f} kWh")
+                                f"Minimální požadavek: {high_target_level:.2f} kWh, Deficit: {energy_deficit:.2f} kWh")
         
         if not critical_hours_after:
             logger.info("Po optimalizaci nebyly nalezeny žádné kritické hodiny.")

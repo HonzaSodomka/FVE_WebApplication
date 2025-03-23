@@ -110,7 +110,11 @@ def simulate_minute_consumption():
                a.inactive_windows,
                a.interruptible
            FROM api_house h
-           JOIN api_appliance a ON h.id = a.house_id
+           JOIN api_appliance a ON 
+               CASE 
+                   WHEN h.id = 99 THEN a.house_id = 9  -- Pro dům 99 používáme spotřebiče domu 9
+                   ELSE a.house_id = h.id              -- Pro ostatní domy používáme jejich vlastní spotřebiče
+               END
            WHERE h.is_active = true
        """)
        rows = cur.fetchall()

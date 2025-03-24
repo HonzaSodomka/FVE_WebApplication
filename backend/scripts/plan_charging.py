@@ -464,10 +464,10 @@ def get_consumption_prediction_by_priority(house_id, current_hour, priority_leve
                 SELECT 
                     c.date,
                     c.time,
-                    (c.items->>'consumption_w')::float as consumption_w,
+                    (items->>'consumption_w')::float as consumption_w,
                     a.priority_level
                 FROM api_consumptiondata c,
-                LATERAL jsonb_array_elements(c.appliance_consumption) items,
+                LATERAL jsonb_array_elements(c.appliance_consumption) as items,
                 api_appliance a
                 WHERE c.house_id = %s 
                     AND c.date >= %s

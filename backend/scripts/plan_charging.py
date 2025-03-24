@@ -1131,11 +1131,10 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                             # Získáme predikci spotřeby jen pro spotřebiče dané priority
                             priority_consumption = get_consumption_prediction_by_priority(
                                 house_id, 
-                                current_hour=current_hour,
+                                current_hour=price_data[hour_idx]['hour'],  # Použijeme hodinu z aktuální iterace
                                 priority_level=priority_level,
                                 have_tomorrow_prices=have_tomorrow_prices
                             )
-                            
                             # Záloha původní spotřeby
                             original_consumption = consumption_data.copy()
                             

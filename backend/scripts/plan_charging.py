@@ -711,8 +711,16 @@ def deactivate_time_windows_for_appliances(house_id, start_date, start_hour, end
                 # Okno jde přes půlnoc (např. 22-6)
                 return (start_h <= window_end) or (window_start <= end_h)
             else:
-                # Standardní okno (např. 8-18)
-                return max(start_h, window_start) < min(end_h, window_end)
+                # Speciální případ, když chceme vypnout přesně jednu hodinu
+                if start_h == end_h:
+                    # Pokud je okno přesně stejné jako hodina
+                    if window_start == window_end == start_h:
+                        return True
+                    # Pokud hodina spadá do intervalu okna (inkluzivně pro začátek)
+                    return window_start <= start_h < window_end
+                else:
+                    # Standardní případ překryvu dvou intervalů - použijeme inkluzivní porovnání
+                    return max(start_h, window_start) <= min(end_h, window_end)
         
         for appliance_id, appliance_type, weekday_hours, weekend_hours in appliances:
             appliance_updated = False

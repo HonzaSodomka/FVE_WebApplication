@@ -555,6 +555,7 @@ def create_inactive_window_for_appliances(house_id, start_date, start_hour, end_
     """
     Vytvoří inactive_window pro spotřebiče dané priority v zadaném časovém rozmezí.
     Pro dům s ID 99 používá spotřebiče domu s ID 9.
+    Zároveň maže neaktivní okna z předchozích dnů.
     
     Args:
         house_id: ID domu
@@ -612,10 +613,44 @@ def create_inactive_window_for_appliances(house_id, start_date, start_hour, end_
         
         updated_count = 0
         
+        # Dnešní datum pro porovnání při čištění starých oken
+        today = datetime.now().date()
+        
         for appliance_id, appliance_type, inactive_windows in appliances:
             # Zkontrolujeme, zda jsou inactive_windows inicializované
             if inactive_windows is None:
                 inactive_windows = []
+            
+            # Vyfiltrujeme stará okna - ponecháme pouze ta, která končí dnes nebo v budoucnu
+            if inactive_windows:
+                filtered_windows = []
+                removed_count = 0
+                
+                for window in inactive_windows:
+                    # Získáme koncové datum okna
+                    end_date_window = window.get("end_date", window.get("start_date", ""))
+                    
+                    if not end_date_window:
+                        # Pokud chybí datum, pro jistotu ponecháme
+                        filtered_windows.append(window)
+                        continue
+                        
+                    # Převedeme na objekt date
+                    try:
+                        end_date_obj = datetime.strptime(end_date_window, '%Y-%m-%d').date()
+                        
+                        # Ponecháme okna, která končí dnes nebo v budoucnu
+                        if end_date_obj >= today:
+                            filtered_windows.append(window)
+                        else:
+                            removed_count += 1
+                            logger.info(f"Ze spotřebiče {appliance_id} odstraněno staré neaktivní okno: {window.get('start_date', '')} {window.get('start_hour', 0)}:00 - {end_date_window} {window.get('end_hour', 0)}:00")
+                    except ValueError:
+                        # Pokud je špatný formát data, pro jistotu ponecháme
+                        filtered_windows.append(window)
+                
+                inactive_windows = filtered_windows
+                logger.info(f"Ze spotřebiče {appliance_id} odstraněno {removed_count} starých neaktivních oken")
             
             # Přidáme nové okno
             inactive_windows.append(inactive_window)

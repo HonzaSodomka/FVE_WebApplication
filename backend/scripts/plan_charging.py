@@ -661,9 +661,9 @@ def deactivate_time_windows_for_appliances(house_id, start_date, start_hour, end
     
     Args:
         house_id: ID domu
-        start_date: Počáteční datum (není přímo využito v kontrole překryvů)
+        start_date: Počáteční datum (objekt date nebo string ve formátu 'YYYY-MM-DD')
         start_hour: Počáteční hodina (0-23)
-        end_date: Koncové datum (není přímo využito v kontrole překryvů)
+        end_date: Koncové datum (objekt date nebo string ve formátu 'YYYY-MM-DD')
         end_hour: Koncová hodina (0-23)
         priority_level: Úroveň priority spotřebičů (1-4)
         
@@ -679,6 +679,28 @@ def deactivate_time_windows_for_appliances(house_id, start_date, start_hour, end
             host="db"
         )
         cur = conn.cursor()
+
+        # Převedeme data na objekty date, pokud jsou stringy
+        if isinstance(start_date, str):
+            start_date_obj = datetime.strptime(start_date, "%Y-%m-%d").date()
+        else:
+            start_date_obj = start_date
+            
+        if isinstance(end_date, str):
+            end_date_obj = datetime.strptime(end_date, "%Y-%m-%d").date()
+        else:
+            end_date_obj = end_date
+            
+        # Zjistíme, zda jsou dny víkendové
+        is_start_weekend = start_date_obj.weekday() >= 5  # 5 = sobota, 6 = neděle
+        is_end_weekend = end_date_obj.weekday() >= 5
+        
+        # Zjistíme, zda interval přesahuje více dnů
+        is_multiday = start_date_obj != end_date_obj
+        
+        logger.info(f"Deaktivace oken: start={start_date_obj} ({['všední', 'víkendový'][is_start_weekend]} den), "
+                   f"end={end_date_obj} ({['všední', 'víkendový'][is_end_weekend]} den), "
+                   f"multiday={is_multiday}")
 
         # Pro dům 99 používáme spotřebiče domu 9
         reference_house_id = 9 if house_id == 99 else house_id
@@ -723,42 +745,87 @@ def deactivate_time_windows_for_appliances(house_id, start_date, start_hour, end
                     return max(start_h, window_start) <= min(end_h, window_end)
         
         for appliance_id, appliance_type, weekday_hours, weekend_hours in appliances:
-            appliance_updated = False
+            appliance_updated_weekday = False
+            appliance_updated_weekend = False
             
-            # Zpracování všedních dnů
-            if weekday_hours:
-                for i, window in enumerate(weekday_hours):
-                    if window.get('is_active', True) and window_overlaps(window, start_hour, end_hour):
-                        weekday_hours[i]['is_active'] = False
-                        stats['weekday_windows_deactivated'] += 1
-                        appliance_updated = True
-                        logger.info(f"Spotřebič {appliance_id} ({appliance_type}): Deaktivováno všední okno {window['start']}:00-{window['end']}:00")
+            # Pro vícedenní interval nebo pokud je počáteční den víkendový, zpracujeme víkendová okna
+            if is_multiday or is_start_weekend:
+                if weekend_hours:
+                    # Zpracování víkendových oken
+                    for i, window in enumerate(weekend_hours):
+                        # Pro vícedenní interval upravíme logiku překryvu
+                        if is_multiday:
+                            # Pokud začínáme o víkendu, kontrolujeme okna od start_hour dále
+                            # Pokud končíme o víkendu, kontrolujeme okna do end_hour
+                            if is_start_weekend and is_end_weekend:
+                                # Celý interval je o víkendu
+                                overlap = window_overlaps(window, start_hour, end_hour)
+                            elif is_start_weekend:
+                                # Začíná o víkendu, končí ve všední den
+                                # Deaktivujeme od start_hour do konce dne
+                                overlap = window_overlaps(window, start_hour, 24)
+                            elif is_end_weekend:
+                                # Začíná ve všední den, končí o víkendu
+                                # Deaktivujeme od začátku dne do end_hour
+                                overlap = window_overlaps(window, 0, end_hour)
+                            else:
+                                # Ani začátek ani konec není o víkendu (např. přes celý týden)
+                                overlap = True  # Deaktivujeme celý den
+                        else:
+                            # Jednodenní interval
+                            overlap = window_overlaps(window, start_hour, end_hour)
+                        
+                        if window.get('is_active', True) and overlap:
+                            weekend_hours[i]['is_active'] = False
+                            stats['weekend_windows_deactivated'] += 1
+                            appliance_updated_weekend = True
+                            logger.info(f"Spotřebič {appliance_id} ({appliance_type}): Deaktivováno víkendové okno {window['start']}:00-{window['end']}:00")
                 
-                if appliance_updated:
-                    cur.execute("""
-                        UPDATE api_appliance 
-                        SET weekday_hours = %s::jsonb
-                        WHERE id = %s
-                    """, [json.dumps(weekday_hours), appliance_id])
-            
-            # Zpracování víkendů
-            appliance_updated = False
-            if weekend_hours:
-                for i, window in enumerate(weekend_hours):
-                    if window.get('is_active', True) and window_overlaps(window, start_hour, end_hour):
-                        weekend_hours[i]['is_active'] = False
-                        stats['weekend_windows_deactivated'] += 1
-                        appliance_updated = True
-                        logger.info(f"Spotřebič {appliance_id} ({appliance_type}): Deaktivováno víkendové okno {window['start']}:00-{window['end']}:00")
-                
-                if appliance_updated:
+                if appliance_updated_weekend:
                     cur.execute("""
                         UPDATE api_appliance 
                         SET weekend_hours = %s::jsonb
                         WHERE id = %s
                     """, [json.dumps(weekend_hours), appliance_id])
             
-            if appliance_updated:
+            # Pro vícedenní interval nebo pokud je počáteční den všední, zpracujeme všední okna
+            if is_multiday or not is_start_weekend:
+                if weekday_hours:
+                    # Zpracování všedních oken
+                    for i, window in enumerate(weekday_hours):
+                        # Pro vícedenní interval upravíme logiku překryvu
+                        if is_multiday:
+                            # Podobná logika jako pro víkendová okna
+                            if not is_start_weekend and not is_end_weekend:
+                                # Celý interval je ve všední dny
+                                overlap = window_overlaps(window, start_hour, end_hour)
+                            elif not is_start_weekend:
+                                # Začíná ve všední den, končí o víkendu
+                                overlap = window_overlaps(window, start_hour, 24)
+                            elif not is_end_weekend:
+                                # Začíná o víkendu, končí ve všední den
+                                overlap = window_overlaps(window, 0, end_hour)
+                            else:
+                                # Ani začátek ani konec není ve všední den
+                                overlap = True  # Deaktivujeme celý den
+                        else:
+                            # Jednodenní interval
+                            overlap = window_overlaps(window, start_hour, end_hour)
+                        
+                        if window.get('is_active', True) and overlap:
+                            weekday_hours[i]['is_active'] = False
+                            stats['weekday_windows_deactivated'] += 1
+                            appliance_updated_weekday = True
+                            logger.info(f"Spotřebič {appliance_id} ({appliance_type}): Deaktivováno všední okno {window['start']}:00-{window['end']}:00")
+                
+                if appliance_updated_weekday:
+                    cur.execute("""
+                        UPDATE api_appliance 
+                        SET weekday_hours = %s::jsonb
+                        WHERE id = %s
+                    """, [json.dumps(weekday_hours), appliance_id])
+            
+            if appliance_updated_weekday or appliance_updated_weekend:
                 stats['appliances_affected'] += 1
         
         conn.commit()

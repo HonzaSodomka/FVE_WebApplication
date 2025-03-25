@@ -1185,7 +1185,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                     prev_hour = price_data[prev_idx]
                     
                     # Kontrola, zda jsme v EXTREME režimu a jde o hodinu s vysokou cenou
-                    if risk_level == 'EXTREME' and prev_hour['price_category'] == 'high' and not high_price_hour_handled:
+                    if risk_level == 'EXTREME' and prev_hour['price_category'] == 'average' and not high_price_hour_handled:
                         logger.warning(f"EXTREME DŮM {house_id}: Při řešení kritické situace je potřeba nabíjet v hodině {prev_hour['date']} {prev_hour['hour']}:00 s vysokou cenou!")
                         high_price_hour_handled = True  # Označíme, že jsme již řešili high hodinu
                         
@@ -1206,10 +1206,11 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                             # Získáme predikci spotřeby jen pro spotřebiče dané priority
                             priority_consumption = get_consumption_prediction_by_priority(
                                 house_id, 
-                                current_hour=price_data[hour_idx]['hour'],  # Použijeme hodinu z aktuální iterace
+                                current_hour=price_data[hour_idx]['hour'],  # Oprava: použijeme hodinu z aktuální iterace
                                 priority_level=priority_level,
                                 have_tomorrow_prices=have_tomorrow_prices
                             )
+                            
                             # Záloha původní spotřeby
                             original_consumption = consumption_data.copy()
                             
@@ -1269,13 +1270,21 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                                         hour_date = deact_hour['date']
                                         hour_hour = deact_hour['hour']
                                         
+                                        # Připravíme konec intervalu, který bude o 1 hodinu více než začátek, pokud jsou stejné
+                                        if critical_hour == hour_hour:
+                                            end_hour = hour_hour + 1
+                                            if end_hour > 23:  # Ošetříme přetečení do dalšího dne
+                                                end_hour = 23  # Pokud jsme na konci dne, bude to stále 23
+                                        else:
+                                            end_hour = critical_hour
+                                            
                                         # Pro constant a cyclic vytváříme inactive_window
                                         create_inactive_window_for_appliances(
                                             house_id=house_id,
                                             start_date=hour_date,
                                             start_hour=hour_hour,
                                             end_date=critical_hour_date,
-                                            end_hour=critical_hour,
+                                            end_hour=end_hour,
                                             priority_level=priority_level
                                         )
                                         
@@ -1285,7 +1294,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                                             start_date=hour_date,
                                             start_hour=hour_hour,
                                             end_date=critical_hour_date,
-                                            end_hour=critical_hour,
+                                            end_hour=end_hour,
                                             priority_level=priority_level
                                         )
                                         
@@ -1367,11 +1376,12 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                 current_levels = simulate_battery_levels(charging_plan)
                 current_level = current_levels[hour_idx]['level']
                 
+                # OPRAVA: Používat konzistentní proměnné pro porovnání a výpis logů
                 if current_level >= high_target_with_reserve:
-                    logger.info(f"KRITICKÁ HODINA VYŘEŠENA: Nový stav baterie {current_level:.2f} kWh >= {high_target_level:.2f} kWh")
+                    logger.info(f"KRITICKÁ HODINA VYŘEŠENA: Nový stav baterie {current_level:.2f} kWh >= {high_target_with_reserve:.2f} kWh (požadavek: {high_target_level:.2f} kWh)")
                 else:
                     remaining_deficit = (high_target_with_reserve - current_level) / charging_efficiency
-                    logger.warning(f"NEPODAŘILO SE ZCELA VYŘEŠIT KRITICKOU HODINU: Stav baterie {current_level:.2f} kWh < {high_target_level:.2f} kWh")
+                    logger.warning(f"NEPODAŘILO SE ZCELA VYŘEŠIT KRITICKOU HODINU: Stav baterie {current_level:.2f} kWh < {high_target_with_reserve:.2f} kWh (požadavek: {high_target_level:.2f} kWh)")
                     logger.warning(f"Zbývající deficit: {remaining_deficit:.2f} kWh - nelze vyřešit pomocí dostupných hodin")
         
         logger.info(f"=== DOKONČENO ŘEŠENÍ KRITICKÝCH HODIN ===")

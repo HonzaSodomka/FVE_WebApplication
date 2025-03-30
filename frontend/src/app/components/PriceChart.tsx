@@ -1,4 +1,4 @@
-"use client"; 
+"use client";
 
 import { useEffect, useState } from "react";
 import { format } from "date-fns";
@@ -35,6 +35,8 @@ interface BarProps {
     level_num: number;
     time: string;
     color: string;
+    price_czk_kwh: number;
+    display_level: string;
   };
 }
 
@@ -48,6 +50,8 @@ const getLevelColor = (level: string) => {
       return "rgba(245, 158, 11, 0.8)";
     case "low":
       return "rgba(34, 197, 94, 0.8)";
+    case "negative":
+      return "rgba(59, 130, 246, 0.8)"; // Modrá barva pro záporné ceny
     default:
       return "rgba(107, 114, 128, 0.8)";
   }
@@ -56,6 +60,8 @@ const getLevelColor = (level: string) => {
 export default function PriceChart({ date }: { date: Date }) {
   const [prices, setPrices] = useState<PriceData[]>([]);
   const [error, setError] = useState<string>("");
+  // Používáme přesnou definici typu pro doménu YAxis
+  const [yAxisDomain, setYAxisDomain] = useState<[number, "auto"]>([0, "auto"]);
 
   //Načítá data při změně datumu
   useEffect(() => {
@@ -66,26 +72,45 @@ export default function PriceChart({ date }: { date: Date }) {
         const response = await fetch(
           `${API_URL}/api/prices/?date=${formattedDate}`,
           {
-            credentials: "include"
+            credentials: "include",
           }
         );
-        
+
         const data = await response.json();
 
         // Kontrola response status kódu
         if (!response.ok) {
           // Backend teď vrací chybovou zprávu v data.error
-          setError(data.error || `Pro datum ${formattedDate} nepodařilo se načíst data.`);
+          setError(
+            data.error ||
+              `Pro datum ${formattedDate} nepodařilo se načíst data.`
+          );
           setPrices([]);
           return;
         }
 
         //Pokud je záznam seřadí data podle hodin a nastaví je
         setError("");
-        setPrices(
-          data.prices.sort((a: PriceData, b: PriceData) => a.hour - b.hour)
+        const sortedPrices = data.prices.sort(
+          (a: PriceData, b: PriceData) => a.hour - b.hour
         );
-        
+        setPrices(sortedPrices);
+
+        // Najít minimální a maximální cenu pro nastavení Y osy
+        const minPrice = Math.min(
+          ...sortedPrices.map((price: PriceData) => price.price_czk / 1000)
+        );
+        const hasNegativePrices = minPrice < 0;
+
+        if (hasNegativePrices) {
+          // Pokud máme záporné ceny, nastavíme spodní limit Y osy
+          // na zaokrouhlení minima dolů (aby se zobrazil prostor pod zápornou cenou)
+          const minYAxis = Math.floor(minPrice) - 0.2;
+          setYAxisDomain([minYAxis, "auto"] as [number, "auto"]);
+        } else {
+          // Pokud nemáme záporné ceny, začínáme od 0
+          setYAxisDomain([0, "auto"] as [number, "auto"]);
+        }
       } catch (err) {
         setError("Nepodařilo se načíst data");
         console.error(err);
@@ -96,18 +121,27 @@ export default function PriceChart({ date }: { date: Date }) {
   }, [date]);
 
   // Nastavuje data pro tabulku - nastavení hodiny, barvy a přepočet z ceny za MWh na kWh
-  const chartData = prices.map((price) => ({
-    ...price,
-    time: `${String(price.hour).padStart(2, "0")}:00`,
-    color: getLevelColor(price.level),
-    price_czk_kwh: price.price_czk / 1000,
-  }));
+  const chartData = prices.map((price) => {
+    // Přidáme speciální level pro záporné ceny
+    const level = price.price_czk < 0 ? "negative" : price.level;
+
+    return {
+      ...price,
+      time: `${String(price.hour).padStart(2, "0")}:00`,
+      color: getLevelColor(level),
+      price_czk_kwh: price.price_czk / 1000,
+      // Přidáme upravený level pro záporné ceny
+      display_level: level,
+    };
+  });
 
   // Průměrná cena také přepočtena na kWh
   const averagePrice =
-    prices.reduce((sum, price) => sum + price.price_czk, 0) /
-    prices.length /
-    1000;
+    prices.length > 0
+      ? prices.reduce((sum, price) => sum + price.price_czk, 0) /
+        prices.length /
+        1000
+      : 0;
 
   return (
     <div className="space-y-6 bg-white p-6 rounded-xl shadow-lg border border-gray-200">
@@ -174,6 +208,15 @@ export default function PriceChart({ date }: { date: Date }) {
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: "#6B7280", fontSize: 12 }}
+                  domain={yAxisDomain as [number, string]}
+                />
+                {/* Přidáme referenční linii pro nulu, aby byl jasný rozdíl mezi kladnými a zápornými cenami */}
+                <ReferenceLine y={0} stroke="#888" strokeDasharray="3 3" />
+                {/* Referenční linie pro průměrnou cenu */}
+                <ReferenceLine
+                  y={averagePrice}
+                  stroke="#3B82F6"
+                  strokeDasharray="3 3"
                 />
                 <Tooltip
                   content={({ active, payload }) => {
@@ -185,8 +228,10 @@ export default function PriceChart({ date }: { date: Date }) {
                           <p>Cena: {data.price_czk_kwh.toFixed(2)} Kč/kWh</p>
                           <p>
                             Úroveň:{" "}
-                            {data.level.charAt(0).toUpperCase() +
-                              data.level.slice(1)}
+                            {data.display_level === "negative"
+                              ? "Záporná"
+                              : data.display_level.charAt(0).toUpperCase() +
+                                data.display_level.slice(1)}
                           </p>
                         </div>
                       );
@@ -194,21 +239,28 @@ export default function PriceChart({ date }: { date: Date }) {
                     return null;
                   }}
                 />
-                <ReferenceLine
-                  y={averagePrice}
-                  stroke="#3B82F6"
-                  strokeDasharray="3 3"
-                />
                 <Bar
                   dataKey="price_czk_kwh"
                   shape={(props: unknown) => {
                     const { x, y, width, height, payload } = props as BarProps;
+
+                    // Pro záporné ceny musíme upravit pozici a výšku sloupce
+                    const isNegative = payload.price_czk_kwh < 0;
+                    const barHeight = Math.abs(height);
+
+                    // Opraveno: Pro záporné hodnoty potřebujeme ZAČÍT OD NULOVÉ OSY
+                    // Najdeme pozici nulové osy v souřadnicovém systému grafu
+                    // Recharts už poskytuje tuto informaci jako část návrhu grafu
+                    const zeroY = y + height; // Pro záporné hodnoty, výška je záporná, takže přidáváme
+
+                    const barY = isNegative ? zeroY : y;
+
                     return (
                       <rect
                         x={x}
-                        y={y}
+                        y={barY}
                         width={width}
-                        height={height}
+                        height={barHeight}
                         fill={payload.color}
                         rx={4}
                         ry={4}

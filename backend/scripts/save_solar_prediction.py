@@ -14,8 +14,8 @@ logging.basicConfig(
 logger = logging.getLogger('api')
 
 def fetch_solar_forecast():
-   latitude = 50.7728417
-   longitude = 15.0721458
+   latitude = 50.7734258
+   longitude = 15.0761286
    declination = 30
    azimuth = 0
    power = 20  # kWp

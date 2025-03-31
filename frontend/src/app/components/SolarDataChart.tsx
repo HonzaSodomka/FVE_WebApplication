@@ -234,7 +234,7 @@ export default function SolarDataChart({ date }: { date: Date }) {
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <p>Lokalita: TUL budova A</p>
+              <p>Lokalita: TUL budova G</p>
               <p>Zeměpisná šířka: 50.7728417°</p>
               <p>Zeměpisná délka: 15.0721458°</p>
             </div>

@@ -1220,7 +1220,7 @@ def optimize_charging_plan(house_id, house_data, solar_data, consumption_data, p
                     prev_hour = price_data[prev_idx]
                     
                     # Kontrola, zda jsme v EXTREME režimu a jde o hodinu s vysokou cenou
-                    if risk_level == 'EXTREME' and prev_hour['price_category'] == 'average' and not high_price_hour_handled:
+                    if risk_level == 'EXTREME' and prev_hour['price_category'] == 'high' and not high_price_hour_handled:
                         logger.warning(f"EXTREME DŮM {house_id}: Při řešení kritické situace je potřeba nabíjet v hodině {prev_hour['date']} {prev_hour['hour']}:00 s vysokou cenou!")
                         high_price_hour_handled = True  # Označíme, že jsme již řešili high hodinu
                         

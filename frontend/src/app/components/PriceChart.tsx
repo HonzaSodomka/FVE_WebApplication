@@ -51,7 +51,7 @@ const getLevelColor = (level: string) => {
     case "low":
       return "rgba(34, 197, 94, 0.8)";
     case "negative":
-      return "rgba(59, 130, 246, 0.8)"; // Modrá barva pro záporné ceny
+      return "rgba(34, 197, 94, 0.8)";
     default:
       return "rgba(107, 114, 128, 0.8)";
   }

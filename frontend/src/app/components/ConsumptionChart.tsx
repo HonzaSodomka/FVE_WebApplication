@@ -82,15 +82,15 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
     const isCurrentDay = isToday(date);
     const currentDisplayHour = serverTime ? serverTime.getHours() + 1 : 24;
     const isFutureHour = isCurrentDay && displayHour > currentDisplayHour;
-
+    const isLiveHour = isCurrentDay && serverTime ? displayHour === currentDisplayHour : false;
+  
     return {
       time: `${String(displayHour).padStart(2, "0")}:00`,
       consumption: isFutureHour ? null : (hourData?.consumption_wh || 0),
-      isLive: serverTime ? displayHour === currentDisplayHour : false,
+      isLive: isLiveHour,
       hour: displayHour,
     };
   });
-
   const CustomTooltip = ({
     active,
     payload,

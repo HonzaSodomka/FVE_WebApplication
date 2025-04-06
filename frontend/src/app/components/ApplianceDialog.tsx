@@ -347,7 +347,7 @@ export default function ApplianceDialog({
           </Button>
         )}
       </DialogTrigger>
-      <DialogContent className="max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-h-[90vh] overflow-y-auto max-w-[700px] w-[125%]">
         <DialogHeader>
           <DialogTitle>
             {appliance ? "Upravit spotřebič" : "Přidat nový spotřebič"}

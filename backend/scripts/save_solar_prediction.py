@@ -27,7 +27,7 @@ def fetch_solar_forecast():
   longitude = 15.0761286
   declination = 30
   azimuth = 0
-  power = 20  # kWp
+  power = 20
 
   url = f"https://api.forecast.solar/estimate/{latitude}/{longitude}/{declination}/{azimuth}/{power}"
   

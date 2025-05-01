@@ -17,7 +17,7 @@ const TimeWindowInput: React.FC<TimeWindowInputProps> = ({
   onChange,
   label,
   maxWindows = 12,
-  showUses = false
+  showUses = false,
 }) => {
   const addWindow = () => {
     if (windows.length < maxWindows) {
@@ -44,18 +44,15 @@ const TimeWindowInput: React.FC<TimeWindowInputProps> = ({
     value: number | boolean
   ) => {
     const newWindows = [...windows];
-    
+
     if (field === "probability") {
-      // Převod z procent na desetinné číslo
       newWindows[index]["probability"] = (value as number) / 100;
     } else if (field === "is_active") {
-      // Pracujeme s boolean hodnotou
       newWindows[index]["is_active"] = value as boolean;
     } else {
-      // Pracujeme s číselnou hodnotou (start, end, uses)
       newWindows[index][field] = value as number;
     }
-    
+
     onChange(newWindows);
   };
 
@@ -64,7 +61,11 @@ const TimeWindowInput: React.FC<TimeWindowInputProps> = ({
       <label className="text-sm text-gray-600 mb-2 block">{label}</label>
       {windows.map((window, index) => (
         <div key={index} className="flex items-center gap-2 mb-2">
-          <div className={`flex-1 grid ${showUses ? 'grid-cols-5' : 'grid-cols-4'} gap-2`}>
+          <div
+            className={`flex-1 grid ${
+              showUses ? "grid-cols-5" : "grid-cols-4"
+            } gap-2`}
+          >
             <div>
               <label className="text-xs text-gray-500">Od</label>
               <select

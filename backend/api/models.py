@@ -1,14 +1,5 @@
 """
 Datové modely pro aplikaci optimalizace nabíjení FVE baterie.
-
-Tento modul definuje všechny datové entity používané v systému, včetně:
-- Cenových dat elektřiny (PriceData)
-- Predikce solární výroby (SolarData)
-- Domů s FVE systémy (House)
-- Spotřebičů v domácnosti (Appliance)
-- Dat o spotřebě (ConsumptionData)
-- Záznamů o nabíjení (ChargingData)
-- Plánů nabíjení (ChargingSchedule)
 """
 
 from django.db import models
@@ -63,10 +54,10 @@ class House(models.Model):
     pro optimalizaci nabíjení.
     """
     RISK_LEVELS = [
-        ('LOW', 'Nízké riziko'),       # Jistota energie za cenu vyšších nákladů
-        ('MEDIUM', 'Střední riziko'),  # Vyvážený přístup
-        ('HIGH', 'Vysoké riziko'),     # Agresivní optimalizace ceny s rizikem drahého dobíjení
-        ('EXTREME', 'Extrémní riziko'),# Agresivní optimalizace s vypínáním spotřebičů
+        ('LOW', 'Nízké riziko'),
+        ('MEDIUM', 'Střední riziko'),
+        ('HIGH', 'Vysoké riziko'),
+        ('EXTREME', 'Extrémní riziko'),
     ]
 
     # Základní informace
@@ -77,7 +68,7 @@ class House(models.Model):
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
     
-    # Solární variace pro simulaci reálných podmínek
+    # Solární variace pro simulaci výkyvů výroby od predikce
     solar_variation = models.FloatField(
         default=1,
         verbose_name="Variace solární výroby"
@@ -113,7 +104,7 @@ class House(models.Model):
     
     # Rizikový profil pro optimalizaci nabíjení
     risk_level = models.CharField(
-        max_length=7,  # Změněno z 6 na 7 kvůli délce "EXTREME"
+        max_length=7,
         choices=RISK_LEVELS,
         default='MEDIUM',
         verbose_name="Úroveň rizika",
@@ -147,10 +138,10 @@ class Appliance(models.Model):
     4. ON_DEMAND - spotřebič používaný náhodně podle pravděpodobnostního modelu (např. konvice)
     """
     APPLIANCE_TYPES = [
-        ('CONSTANT', 'Konstantní spotřeba'),      # např. router
-        ('CYCLIC', 'Cyklická spotřeba'),         # např. lednice
-        ('SCHEDULED', 'Plánovaná spotřeba'),      # např. pračka
-        ('ON_DEMAND', 'Spotřeba na vyžádání'),    # např. konvice
+        ('CONSTANT', 'Konstantní spotřeba'),
+        ('CYCLIC', 'Cyklická spotřeba'),
+        ('SCHEDULED', 'Plánovaná spotřeba'),
+        ('ON_DEMAND', 'Spotřeba na vyžádání'), 
     ]
     
     # Priorita spotřebiče pro vypínání při optimalizaci
@@ -191,7 +182,7 @@ class Appliance(models.Model):
     
     # Možnost přerušení běhu
     interruptible = models.BooleanField(
-        default=False,  # Změněno z True na False
+        default=False,
         verbose_name="Lze přerušit",
         help_text="Zda je možné přerušit běh spotřebiče uprostřed cyklu"
     )

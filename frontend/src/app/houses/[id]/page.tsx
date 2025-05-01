@@ -82,7 +82,7 @@ export default function Page() {
       const chargingData = await chargingResponse.json();
 
       setDailyStats({
-        consumption_kwh: consumptionData.daily_total / 1000, // Převod z Wh na kWh
+        consumption_kwh: consumptionData.daily_total / 1000,
         solar_charged_kwh: chargingData.solar_charged_kwh,
         grid_charged_kwh: chargingData.grid_charged_kwh,
         grid_charged_cost: chargingData.grid_charged_cost,
@@ -191,7 +191,6 @@ export default function Page() {
   return (
     <main className="min-h-screen bg-gradient-to-br from-blue-50 via-white to-green-50 p-4 md:p-8">
       <div className="max-w-7xl mx-auto">
-        {/* Header sekce */}
         <div className="bg-white rounded-lg shadow-sm border border-gray-100 p-4 mb-6">
           <div className="flex flex-wrap justify-between items-center gap-4">
             <div className="flex items-center gap-4">
@@ -223,7 +222,9 @@ export default function Page() {
                   }`}
                   onClick={toggleSimulation}
                   disabled={isTogglingSimulation}
-                  title={house.is_active ? "Zastavit simulaci" : "Spustit simulaci"}
+                  title={
+                    house.is_active ? "Zastavit simulaci" : "Spustit simulaci"
+                  }
                 >
                   {isTogglingSimulation ? (
                     <div className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
@@ -242,9 +243,7 @@ export default function Page() {
         </div>
 
         <div className="grid gap-6 lg:grid-cols-12">
-          {/* Levý sloupec */}
           <div className="col-span-12 lg:col-span-5 space-y-6">
-            {/* Parametry domu */}
             <Card className="bg-white shadow-sm border border-gray-100">
               <CardHeader className="pb-2">
                 <CardTitle className="text-xl font-semibold text-gray-900">
@@ -252,7 +251,6 @@ export default function Page() {
                 </CardTitle>
               </CardHeader>
               <CardContent>
-                {/* Baterie */}
                 <div className="bg-blue-50 rounded-lg p-4 mb-4">
                   <h3 className="text-sm font-medium text-blue-900 mb-3">
                     Stav baterie
@@ -298,7 +296,6 @@ export default function Page() {
                   </div>
                 </div>
 
-                {/* Denní statistiky */}
                 <div className="bg-green-50 rounded-lg p-4 mb-4">
                   <h3 className="text-sm font-medium text-green-900 mb-3">
                     Denní statistiky {format(date, "dd.MM.yyyy")}
@@ -338,7 +335,6 @@ export default function Page() {
                 </div>
 
                 <div className="grid grid-cols-2 gap-4">
-                  {/* Výkonové parametry */}
                   <div className="p-4 bg-gray-50 rounded-lg">
                     <h3 className="text-sm font-medium text-gray-900 mb-2">
                       Výkonové parametry
@@ -359,7 +355,6 @@ export default function Page() {
                     </div>
                   </div>
 
-                  {/* Účinnost */}
                   <div className="p-4 bg-gray-50 rounded-lg">
                     <h3 className="text-sm font-medium text-gray-900 mb-2">
                       Účinnost
@@ -380,7 +375,6 @@ export default function Page() {
                     </div>
                   </div>
 
-                  {/* Risk level a status */}
                   <div className="bg-gray-50 rounded-lg p-4">
                     <h3 className="text-sm font-medium text-gray-900 mb-2">
                       Úroveň rizika
@@ -391,18 +385,19 @@ export default function Page() {
                           LOW: "bg-green-100 text-green-800",
                           MEDIUM: "bg-yellow-100 text-yellow-800",
                           HIGH: "bg-red-100 text-red-800",
-                          EXTREME: "bg-purple-100 text-purple-800", // Přidána podpora pro EXTREME úroveň rizika
+                          EXTREME: "bg-purple-100 text-purple-800",
                         }[house.risk_level]
                       }`}
-                      >
+                    >
+                      {
                         {
-                          {
-                            LOW: "Nízké - Nabíjí i za vyšší ceny",
-                            MEDIUM: "Střední - Vyvážený přístup",
-                            HIGH: "Vysoké - Agresivní optimalizace ceny",
-                            EXTREME: "Extrémní - Optimalizace s vypínáním spotřebičů", // Konzistentní text
-                          }[house.risk_level]
-                        }
+                          LOW: "Nízké - Nabíjí i za vyšší ceny",
+                          MEDIUM: "Střední - Vyvážený přístup",
+                          HIGH: "Vysoké - Agresivní optimalizace ceny",
+                          EXTREME:
+                            "Extrémní - Optimalizace s vypínáním spotřebičů",
+                        }[house.risk_level]
+                      }
                     </span>
                   </div>
                   <div className="bg-gray-50 rounded-lg p-4">
@@ -422,9 +417,8 @@ export default function Page() {
                 </div>
               </CardContent>
             </Card>
-            
-            {/* Spotřebiče */}
-            <ApplianceList 
+
+            <ApplianceList
               appliances={appliances}
               houseId={parseInt(params.id as string)}
               onSuccess={fetchData}
@@ -432,15 +426,12 @@ export default function Page() {
             />
           </div>
 
-          {/* Pravý sloupec - grafy */}
           <div className="col-span-12 lg:col-span-7 space-y-6">
-            {/* Plánované nabíjení */}
             <ChargingScheduleChart
               houseId={parseInt(params.id as string)}
               date={date}
             />
 
-            {/* Graf spotřeby */}
             <ConsumptionChart
               houseId={parseInt(params.id as string)}
               date={date}

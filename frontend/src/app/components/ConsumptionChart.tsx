@@ -77,39 +77,38 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
   const chartData: ChartData[] = Array.from({ length: 24 }, (_, index) => {
     const displayHour = index + 1;
     const dataHour = index;
-    const hourData = data.find(item => item.hour === dataHour);
-    
+    const hourData = data.find((item) => item.hour === dataHour);
+
     const isCurrentDay = isToday(date);
     const currentDisplayHour = serverTime ? serverTime.getHours() + 1 : 24;
     const isFutureHour = isCurrentDay && displayHour > currentDisplayHour;
-    const isLiveHour = isCurrentDay && serverTime ? displayHour === currentDisplayHour : false;
-  
+    const isLiveHour =
+      isCurrentDay && serverTime ? displayHour === currentDisplayHour : false;
+
     return {
       time: `${String(displayHour).padStart(2, "0")}:00`,
-      consumption: isFutureHour ? null : (hourData?.consumption_wh || 0),
+      consumption: isFutureHour ? null : hourData?.consumption_wh || 0,
       isLive: isLiveHour,
       hour: displayHour,
     };
   });
-  const CustomTooltip = ({
-    active,
-    payload,
-  }: TooltipProps<number, string>) => {
+
+  const CustomTooltip = ({ active, payload }: TooltipProps<number, string>) => {
     if (active && payload && payload.length > 0 && payload[0].value !== null) {
       const value = payload[0].value as number;
       const data = payload[0].payload as ChartData;
 
       const startHour = data.hour - 1;
-      const timeRange = `${String(startHour).padStart(2, "0")}:00 - ${String(startHour).padStart(2, "0")}:59`;
+      const timeRange = `${String(startHour).padStart(2, "0")}:00 - ${String(
+        startHour
+      ).padStart(2, "0")}:59`;
 
       return (
         <div className="bg-white p-3 border rounded-lg shadow">
           <p className="font-bold">{timeRange}</p>
           <p>
             Spotřeba: {value.toFixed(2)} Wh
-            {data.isLive && (
-              <span className="ml-2 text-green-600">(Live)</span>
-            )}
+            {data.isLive && <span className="ml-2 text-green-600">(Live)</span>}
           </p>
         </div>
       );
@@ -155,7 +154,6 @@ export default function ConsumptionChart({ houseId, date }: ChartProps) {
         </span>
       </div>
 
-      {/* Box s celkovou denní spotřebou */}
       <div className="text-center mb-4">
         <p className="text-sm text-gray-500">Celková denní spotřeba</p>
         <p className="text-xl font-bold text-blue-600">

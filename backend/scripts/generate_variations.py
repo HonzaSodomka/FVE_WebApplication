@@ -14,7 +14,7 @@ logger = logging.getLogger('api')
 def generate_variations():
     """
     Generuje náhodné variační koeficienty pro solární výrobu všech aktivních domů.
-    Speciální domy s ID 9, 99, 999, 9999, 99999 sdílejí stejnou variaci.
+    Testovací domy s ID 9, 99, 999, 9999, 99999 sdílejí stejnou variaci.
     Variační koeficient je v rozmezí 0.8-1.2 (80-120% očekávané výroby).
     """
     try:

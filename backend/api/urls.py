@@ -1,12 +1,7 @@
 """
 Konfigurace URL tras pro FVE API.
 
-Tento modul definuje všechny dostupné API endpointy aplikace, včetně:
-- Endpointů pro cenová data a solární predikce
-- Správy domů a jejich spotřebičů
-- Autentizace a kontroly přístupu
-- Dat o spotřebě a nabíjení
-- Plánů nabíjení
+Tento modul definuje všechny dostupné API endpointy aplikace
 """
 
 from django.urls import path

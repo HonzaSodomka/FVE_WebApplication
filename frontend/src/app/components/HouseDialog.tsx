@@ -1,12 +1,24 @@
 "use client";
 
-import React, { useState, useEffect } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Input } from '@/components/ui/input';
-import { Button } from '@/components/ui/button';
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Plus, Pencil, Info } from 'lucide-react';
+import React, { useState, useEffect } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Plus, Pencil, Info } from "lucide-react";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
@@ -32,41 +44,40 @@ interface HouseDialogProps {
 
 export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
   const [isOpen, setIsOpen] = useState(false);
-  
+
   const [formData, setFormData] = useState({
-    name: '',
-    solar_power: '',
-    battery_capacity: '',
-    current_battery_level: '0',
-    min_battery_level: '10',
-    max_charging_power: '',
-    max_discharging_power: '',
-    charging_efficiency: '90',
-    discharging_efficiency: '90',
-    risk_level: 'MEDIUM' as 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME'
+    name: "",
+    solar_power: "",
+    battery_capacity: "",
+    current_battery_level: "0",
+    min_battery_level: "10",
+    max_charging_power: "",
+    max_discharging_power: "",
+    charging_efficiency: "90",
+    discharging_efficiency: "90",
+    risk_level: "MEDIUM" as "LOW" | "MEDIUM" | "HIGH" | "EXTREME",
   });
-  
+
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  // Doporučené hodnoty podle rizikového profilu
   const recommendedValues = {
     LOW: {
       min_battery_level: 10,
-      max_level: 20
+      max_level: 20,
     },
     MEDIUM: {
       min_battery_level: 7.5,
-      max_level: 15
+      max_level: 15,
     },
     HIGH: {
       min_battery_level: 5,
-      max_level: 10
+      max_level: 10,
     },
     EXTREME: {
       min_battery_level: 5,
-      max_level: 10
-    }
+      max_level: 10,
+    },
   };
 
   useEffect(() => {
@@ -81,17 +92,17 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
         max_discharging_power: house.max_discharging_power.toString(),
         charging_efficiency: house.charging_efficiency.toString(),
         discharging_efficiency: house.discharging_efficiency.toString(),
-        risk_level: house.risk_level
+        risk_level: house.risk_level,
       });
     }
   }, [house]);
 
   useEffect(() => {
-    // Aktualizace doporučené hodnoty min_battery_level při změně rizikového profilu
     if (!house) {
-      setFormData(prevData => ({
+      setFormData((prevData) => ({
         ...prevData,
-        min_battery_level: recommendedValues[prevData.risk_level].min_battery_level.toString()
+        min_battery_level:
+          recommendedValues[prevData.risk_level].min_battery_level.toString(),
       }));
     }
   }, [formData.risk_level, house]);
@@ -103,18 +114,18 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
 
     try {
       let url = `${API_URL}/api/houses/`;
-      let method = 'POST';
+      let method = "POST";
 
       if (house?.id) {
         url += `?id=${house.id}`;
-        method = 'PATCH';
+        method = "PATCH";
       }
 
       const response = await fetch(url, {
         method,
         credentials: "include",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
         body: JSON.stringify({
           name: formData.name,
@@ -126,31 +137,32 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
           max_discharging_power: parseFloat(formData.max_discharging_power),
           charging_efficiency: parseFloat(formData.charging_efficiency),
           discharging_efficiency: parseFloat(formData.discharging_efficiency),
-          risk_level: formData.risk_level
+          risk_level: formData.risk_level,
         }),
       });
 
-      if (!response.ok) throw new Error('Nepodařilo se uložit dům');
+      if (!response.ok) throw new Error("Nepodařilo se uložit dům");
 
       onSuccess();
       setIsOpen(false);
-      
+
       if (!house) {
         setFormData({
-          name: '',
-          solar_power: '',
-          battery_capacity: '',
-          current_battery_level: '0',
-          min_battery_level: recommendedValues['MEDIUM'].min_battery_level.toString(),
-          max_charging_power: '',
-          max_discharging_power: '',
-          charging_efficiency: '90',
-          discharging_efficiency: '90',
-          risk_level: 'MEDIUM'
+          name: "",
+          solar_power: "",
+          battery_capacity: "",
+          current_battery_level: "0",
+          min_battery_level:
+            recommendedValues["MEDIUM"].min_battery_level.toString(),
+          max_charging_power: "",
+          max_discharging_power: "",
+          charging_efficiency: "90",
+          discharging_efficiency: "90",
+          risk_level: "MEDIUM",
         });
       }
     } catch (err) {
-      setError('Nepodařilo se uložit dům');
+      setError("Nepodařilo se uložit dům");
       console.error(err);
     } finally {
       setIsLoading(false);
@@ -175,14 +187,12 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
           </Button>
         )}
       </DialogTrigger>
-      
+
       <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader className="sticky top-0 bg-white pb-4 border-b">
-          <DialogTitle>
-            {house ? 'Upravit dům' : 'Přidat nový dům'}
-          </DialogTitle>
+          <DialogTitle>{house ? "Upravit dům" : "Přidat nový dům"}</DialogTitle>
         </DialogHeader>
-        
+
         <div className="py-4">
           <form onSubmit={handleSubmit} className="space-y-4">
             {error && (
@@ -197,7 +207,9 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                 </label>
                 <Input
                   value={formData.name}
-                  onChange={(e) => setFormData({...formData, name: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({ ...formData, name: e.target.value })
+                  }
                   placeholder="Např. Můj dům"
                   required
                 />
@@ -212,7 +224,9 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                   step="0.1"
                   min="0"
                   value={formData.solar_power}
-                  onChange={(e) => setFormData({...formData, solar_power: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({ ...formData, solar_power: e.target.value })
+                  }
                   placeholder="Např. 10.0"
                   required
                 />
@@ -227,7 +241,12 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                   step="0.1"
                   min="0"
                   value={formData.battery_capacity}
-                  onChange={(e) => setFormData({...formData, battery_capacity: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      battery_capacity: e.target.value,
+                    })
+                  }
                   placeholder="Např. 10.0"
                   required
                 />
@@ -242,7 +261,12 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                   step="0.1"
                   min="0"
                   value={formData.max_charging_power}
-                  onChange={(e) => setFormData({...formData, max_charging_power: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      max_charging_power: e.target.value,
+                    })
+                  }
                   placeholder="Např. 3.0"
                   required
                 />
@@ -257,7 +281,12 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                   step="0.1"
                   min="0"
                   value={formData.max_discharging_power}
-                  onChange={(e) => setFormData({...formData, max_discharging_power: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      max_discharging_power: e.target.value,
+                    })
+                  }
                   placeholder="Např. 3.0"
                   required
                 />
@@ -267,20 +296,28 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                 <label className="block text-sm font-medium mb-1">
                   Úroveň rizika
                 </label>
-                <Select 
+                <Select
                   value={formData.risk_level}
-                  onValueChange={(value: 'LOW' | 'MEDIUM' | 'HIGH' | 'EXTREME') => 
-                    setFormData({...formData, risk_level: value})
-                  }
+                  onValueChange={(
+                    value: "LOW" | "MEDIUM" | "HIGH" | "EXTREME"
+                  ) => setFormData({ ...formData, risk_level: value })}
                 >
                   <SelectTrigger>
                     <SelectValue placeholder="Vyberte úroveň rizika" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="LOW">Nízké - Nabíjí i za vyšší ceny</SelectItem>
-                    <SelectItem value="MEDIUM">Střední - Vyvážený přístup</SelectItem>
-                    <SelectItem value="HIGH">Vysoké - Agresivní optimalizace ceny</SelectItem>
-                    <SelectItem value="EXTREME">Extrémní - Optimalizace s vypínáním spotřebičů</SelectItem>
+                    <SelectItem value="LOW">
+                      Nízké - Nabíjí i za vyšší ceny
+                    </SelectItem>
+                    <SelectItem value="MEDIUM">
+                      Střední - Vyvážený přístup
+                    </SelectItem>
+                    <SelectItem value="HIGH">
+                      Vysoké - Agresivní optimalizace ceny
+                    </SelectItem>
+                    <SelectItem value="EXTREME">
+                      Extrémní - Optimalizace s vypínáním spotřebičů
+                    </SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -292,7 +329,8 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                   </label>
                   <div className="ml-2 flex items-center text-blue-600 text-xs">
                     <Info className="h-3 w-3 mr-1" />
-                    Doporučeno: {recommendedValues[formData.risk_level].min_battery_level}%
+                    Doporučeno:{" "}
+                    {recommendedValues[formData.risk_level].min_battery_level}%
                   </div>
                 </div>
                 <Input
@@ -301,7 +339,12 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                   min="0"
                   max="100"
                   value={formData.min_battery_level}
-                  onChange={(e) => setFormData({...formData, min_battery_level: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      min_battery_level: e.target.value,
+                    })
+                  }
                   placeholder="Např. 10"
                 />
                 <div className="mt-1 text-xs text-gray-500">
@@ -325,7 +368,12 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                   min="0"
                   max="100"
                   value={formData.charging_efficiency}
-                  onChange={(e) => setFormData({...formData, charging_efficiency: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      charging_efficiency: e.target.value,
+                    })
+                  }
                   placeholder="Např. 90"
                 />
               </div>
@@ -340,7 +388,12 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
                   min="0"
                   max="100"
                   value={formData.discharging_efficiency}
-                  onChange={(e) => setFormData({...formData, discharging_efficiency: e.target.value})}
+                  onChange={(e) =>
+                    setFormData({
+                      ...formData,
+                      discharging_efficiency: e.target.value,
+                    })
+                  }
                   placeholder="Např. 90"
                 />
               </div>
@@ -354,10 +407,7 @@ export default function HouseDialog({ house, onSuccess }: HouseDialogProps) {
               >
                 Zrušit
               </Button>
-              <Button
-                type="submit"
-                disabled={isLoading}
-              >
+              <Button type="submit" disabled={isLoading}>
                 {isLoading ? "Ukládám..." : house ? "Uložit" : "Přidat"}
               </Button>
             </div>

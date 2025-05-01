@@ -8,7 +8,6 @@ import PriceChart from "./components/PriceChart";
 import SolarDataChart from "./components/SolarDataChart";
 
 export default function Home() {
-  //Nastavení data - výchozí je dnešek
   const [date, setDate] = useState<Date>(() => new Date());
 
   return (

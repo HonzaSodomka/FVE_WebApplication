@@ -4,7 +4,14 @@ import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
-import { ArrowLeft, Trash2, ArrowRight, Home, SunMedium, Battery } from "lucide-react";
+import {
+  ArrowLeft,
+  Trash2,
+  ArrowRight,
+  Home,
+  SunMedium,
+  Battery,
+} from "lucide-react";
 import { useRouter } from "next/navigation";
 import HouseDialog from "@/app/components/HouseDialog";
 
@@ -55,7 +62,9 @@ export default function Page() {
                 </Button>
               </Link>
               <div>
-                <h1 className="text-2xl font-bold text-gray-900">Správa domů</h1>
+                <h1 className="text-2xl font-bold text-gray-900">
+                  Správa domů
+                </h1>
                 <p className="text-sm text-gray-500 mt-1">
                   Celkem domů: {houses.length}
                 </p>
@@ -77,7 +86,9 @@ export default function Page() {
           ) : houses.length === 0 ? (
             <div className="text-center py-12">
               <Home className="mx-auto h-12 w-12 text-gray-400 mb-4" />
-              <h3 className="text-lg font-medium text-gray-900 mb-2">Žádné domy</h3>
+              <h3 className="text-lg font-medium text-gray-900 mb-2">
+                Žádné domy
+              </h3>
               <p className="text-gray-500 mb-6">
                 Zatím zde nejsou přidány žádné domy k monitorování
               </p>
@@ -86,7 +97,7 @@ export default function Page() {
           ) : (
             <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
               {houses.map((house) => (
-                <Card 
+                <Card
                   key={house.id}
                   className="group hover:shadow-md transition-all duration-200 border border-gray-100"
                 >
@@ -106,9 +117,9 @@ export default function Page() {
                           try {
                             const response = await fetch(
                               `${API_URL}/api/houses/?id=${house.id}`,
-                              { 
+                              {
                                 method: "DELETE",
-                                credentials: "include"
+                                credentials: "include",
                               }
                             );
 
@@ -133,8 +144,12 @@ export default function Page() {
                           <SunMedium className="h-5 w-5 text-yellow-600" />
                         </div>
                         <div>
-                          <p className="text-sm text-gray-500">Solární panely</p>
-                          <p className="font-medium text-gray-900">{house.solar_power} kWp</p>
+                          <p className="text-sm text-gray-500">
+                            Solární panely
+                          </p>
+                          <p className="font-medium text-gray-900">
+                            {house.solar_power} kWp
+                          </p>
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
@@ -142,8 +157,12 @@ export default function Page() {
                           <Battery className="h-5 w-5 text-blue-600" />
                         </div>
                         <div>
-                          <p className="text-sm text-gray-500">Kapacita baterie</p>
-                          <p className="font-medium text-gray-900">{house.battery_capacity} kWh</p>
+                          <p className="text-sm text-gray-500">
+                            Kapacita baterie
+                          </p>
+                          <p className="font-medium text-gray-900">
+                            {house.battery_capacity} kWh
+                          </p>
                         </div>
                       </div>
                     </div>

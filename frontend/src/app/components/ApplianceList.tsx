@@ -1,10 +1,7 @@
-import React from 'react';
+import React from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardHeader, CardContent, CardTitle } from "@/components/ui/card";
-import {
-  Collapsible,
-  CollapsibleContent,
-} from "@/components/ui/collapsible";
+import { Collapsible, CollapsibleContent } from "@/components/ui/collapsible";
 import { ChevronDown, ChevronUp, Trash2 } from "lucide-react";
 import { Appliance } from "@/types/appliance";
 import ApplianceDialog from "./ApplianceDialog";
@@ -13,23 +10,23 @@ const APPLIANCE_TYPES = [
   {
     type: "CONSTANT",
     title: "Konstantní spotřeba",
-    description: "Neměnná spotřeba energie, běží nepřetržitě"
+    description: "Neměnná spotřeba energie, běží nepřetržitě",
   },
   {
     type: "CYCLIC",
     title: "Cyklická spotřeba",
-    description: "Střídá fáze běhu a pohotovostního režimu"
+    description: "Střídá fáze běhu a pohotovostního režimu",
   },
   {
     type: "SCHEDULED",
     title: "Plánovaná spotřeba",
-    description: "Spouští se v definovaných časových oknech"
+    description: "Spouští se v definovaných časových oknech",
   },
   {
     type: "ON_DEMAND",
     title: "Spotřeba na vyžádání",
-    description: "Nepravidelné používání během dne"
-  }
+    description: "Nepravidelné používání během dne",
+  },
 ] as const;
 
 interface ApplianceListProps {
@@ -49,26 +46,25 @@ interface TypeSectionProps {
   onDelete: (id: number) => void;
 }
 
-const TypeSection: React.FC<TypeSectionProps> = ({ 
-  type, 
-  title, 
-  description, 
+const TypeSection: React.FC<TypeSectionProps> = ({
+  type,
+  title,
+  description,
   appliances,
   houseId,
   onSuccess,
-  onDelete 
+  onDelete,
 }) => {
   const [isOpen, setIsOpen] = React.useState<boolean>(false);
-  const appliancesOfType = appliances.filter((a: Appliance) => a.appliance_type === type);
+  const appliancesOfType = appliances.filter(
+    (a: Appliance) => a.appliance_type === type
+  );
 
   if (appliancesOfType.length === 0) return null;
 
   return (
     <div className="bg-white rounded-lg border border-gray-200">
-      <div 
-        className="p-4 cursor-pointer"
-        onClick={() => setIsOpen(!isOpen)}
-      >
+      <div className="p-4 cursor-pointer" onClick={() => setIsOpen(!isOpen)}>
         <div className="flex items-center justify-between">
           <div>
             <div className="flex items-center gap-2 mb-1">
@@ -79,8 +75,8 @@ const TypeSection: React.FC<TypeSectionProps> = ({
             </div>
             <p className="text-sm text-gray-600">{description}</p>
           </div>
-          <Button 
-            variant="ghost" 
+          <Button
+            variant="ghost"
             size="sm"
             onClick={(e) => {
               e.stopPropagation();
@@ -110,7 +106,9 @@ const TypeSection: React.FC<TypeSectionProps> = ({
                     </h4>
                     <p className="text-sm text-gray-600">
                       Spotřeba: {appliance.power_consumption.toString()} W
-                      {appliance.standby_power ? ` | Standby: ${appliance.standby_power} W` : ''}
+                      {appliance.standby_power
+                        ? ` | Standby: ${appliance.standby_power} W`
+                        : ""}
                     </p>
                   </div>
                   <div className="flex gap-2">
@@ -138,11 +136,11 @@ const TypeSection: React.FC<TypeSectionProps> = ({
   );
 };
 
-const ApplianceList: React.FC<ApplianceListProps> = ({ 
-  appliances, 
-  houseId, 
-  onSuccess, 
-  onDelete 
+const ApplianceList: React.FC<ApplianceListProps> = ({
+  appliances,
+  houseId,
+  onSuccess,
+  onDelete,
 }) => {
   if (appliances.length === 0) {
     return (
@@ -152,10 +150,7 @@ const ApplianceList: React.FC<ApplianceListProps> = ({
             <CardTitle className="text-xl font-semibold text-gray-900">
               Spotřebiče
             </CardTitle>
-            <ApplianceDialog
-              houseId={houseId}
-              onSuccess={onSuccess}
-            />
+            <ApplianceDialog houseId={houseId} onSuccess={onSuccess} />
           </div>
         </CardHeader>
         <CardContent>
@@ -163,10 +158,7 @@ const ApplianceList: React.FC<ApplianceListProps> = ({
             <p className="text-gray-500 mb-4">
               Zatím nejsou přidány žádné spotřebiče
             </p>
-            <ApplianceDialog
-              houseId={houseId}
-              onSuccess={onSuccess}
-            />
+            <ApplianceDialog houseId={houseId} onSuccess={onSuccess} />
           </div>
         </CardContent>
       </Card>
@@ -180,16 +172,13 @@ const ApplianceList: React.FC<ApplianceListProps> = ({
           <CardTitle className="text-xl font-semibold text-gray-900">
             Spotřebiče ({appliances.length})
           </CardTitle>
-          <ApplianceDialog
-            houseId={houseId}
-            onSuccess={onSuccess}
-          />
+          <ApplianceDialog houseId={houseId} onSuccess={onSuccess} />
         </div>
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
           {APPLIANCE_TYPES.map((type) => (
-            <TypeSection 
+            <TypeSection
               key={type.type}
               {...type}
               appliances={appliances}

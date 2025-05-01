@@ -116,7 +116,7 @@ def simulate_combined_charging():
         )
         cur = conn.cursor()
 
-        # Použití naivního datetime bez timezone
+        # Použití datetime bez timezone
         current_time = datetime.now().replace(tzinfo=None)
         current_date = current_time.date()
         current_hour = current_time.hour
@@ -184,7 +184,6 @@ def simulate_combined_charging():
                     solar_data = cur.fetchone()
 
                     if solar_data and solar_data[0] > 0:
-                        # Vyrobená energie za hodinu v Wh (pro 20kWp)
                         period_wh = solar_data[0]
 
                         # Přepočet na instalovaný výkon domu
@@ -307,9 +306,9 @@ def simulate_combined_charging():
                     """, (
                         house_id, 
                         current_date,
-                        actual_solar_charge_kwh,  # Skutečné dobití ze solárů
-                        actual_planned_charge_kwh + actual_emergency_charge_kwh,  # Skutečné dobití ze sítě
-                        grid_charging_cost  # Náklady (počítáno z energie před účinností)
+                        actual_solar_charge_kwh,
+                        actual_planned_charge_kwh + actual_emergency_charge_kwh,
+                        grid_charging_cost
                     ))
                     
                     logger.info(f"Dům {house_id}: Nabito celkem {total_actual_charge_kwh:.4f} kWh, baterie {new_level:.2f} kWh ({new_level/battery_capacity*100:.1f}%)")

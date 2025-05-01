@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from "react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
@@ -20,23 +20,24 @@ interface PriceData {
   level_num: number;
 }
 
-// Helper funkce pro formátování data jako YYYY-MM-DD
 function formatDateForAPI(date: Date): string {
   const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
   return `${year}-${month}-${day}`;
 }
 
-// Helper funkce pro formátování data jako DD. MM. YYYY
 function formatDisplayDate(date: Date): string {
-  const day = String(date.getDate()).padStart(2, '0');
-  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, "0");
+  const month = String(date.getMonth() + 1).padStart(2, "0");
   const year = date.getFullYear();
   return `${day}. ${month}. ${year}`;
 }
 
-export default function ChargingScheduleDisplay({ houseId, date }: ChargingScheduleProps) {
+export default function ChargingScheduleDisplay({
+  houseId,
+  date,
+}: ChargingScheduleProps) {
   const [scheduleData, setScheduleData] = useState<ScheduleItem[]>([]);
   const [priceData, setPriceData] = useState<PriceData[]>([]);
   const [message, setMessage] = useState<string | null>(null);
@@ -49,11 +50,10 @@ export default function ChargingScheduleDisplay({ houseId, date }: ChargingSched
       setIsLoading(true);
       setError(null);
       setMessage(null);
-      
+
       try {
         const formattedDate = formatDateForAPI(date);
-        
-        // Načtení dat o nabíjecím plánu
+
         const response = await fetch(
           `${API_URL}/api/houses/${houseId}/charging_schedule/?date=${formattedDate}`,
           {
@@ -66,45 +66,42 @@ export default function ChargingScheduleDisplay({ houseId, date }: ChargingSched
         }
 
         const data = await response.json();
-        
-        // Nastavení zprávy z API, pokud existuje
+
         if (data.message) {
           setMessage(data.message);
         }
-        
-        // Zpracování dat a seřazení podle hodiny
+
         const processedData = data.schedule
           .map((item: ScheduleItem) => ({
             hour: item.hour,
-            planned_charging_kwh: parseFloat(typeof item.planned_charging_kwh === 'string' ? 
-              item.planned_charging_kwh : 
-              item.planned_charging_kwh.toString()
+            planned_charging_kwh: parseFloat(
+              typeof item.planned_charging_kwh === "string"
+                ? item.planned_charging_kwh
+                : item.planned_charging_kwh.toString()
             ),
           }))
           .sort((a: ScheduleItem, b: ScheduleItem) => a.hour - b.hour);
-        
+
         setScheduleData(processedData);
-        
-        // Výpočet celkového plánovaného nabíjení
+
         const total = processedData.reduce(
-          (sum: number, item: ScheduleItem) => sum + (item.planned_charging_kwh as number), 
+          (sum: number, item: ScheduleItem) =>
+            sum + (item.planned_charging_kwh as number),
           0
         );
         setTotalCharging(total);
-        
-        // Načtení dat o cenách pro kontext
+
         const priceResponse = await fetch(
           `${API_URL}/api/prices/?date=${formattedDate}`,
           {
             credentials: "include",
           }
         );
-        
+
         if (priceResponse.ok) {
           const priceData = await priceResponse.json();
           setPriceData(priceData.prices || []);
         }
-        
       } catch (err) {
         console.error("Error fetching charging schedule:", err);
         setError("Nepodařilo se načíst data o plánovaném nabíjení");
@@ -116,18 +113,21 @@ export default function ChargingScheduleDisplay({ houseId, date }: ChargingSched
     fetchData();
   }, [houseId, date]);
 
-  // Funkce pro získání informací o ceně pro hodinu
   const getPriceInfo = (hour: number) => {
-    const price = priceData.find(p => p.hour === hour);
+    const price = priceData.find((p) => p.hour === hour);
     if (!price) return null;
-    
+
     return {
-      priceValue: (price.price_czk / 1000).toFixed(2)
+      priceValue: (price.price_czk / 1000).toFixed(2),
     };
   };
 
   if (isLoading) {
-    return <div className="p-6 flex justify-center items-center">Načítání dat...</div>;
+    return (
+      <div className="p-6 flex justify-center items-center">
+        Načítání dat...
+      </div>
+    );
   }
 
   if (error) {
@@ -165,22 +165,29 @@ export default function ChargingScheduleDisplay({ houseId, date }: ChargingSched
 
       {scheduleData.length === 0 ? (
         <div className="bg-gray-50 rounded-lg p-6 text-center border border-gray-200">
-          <p className="text-gray-600">{message || "Pro tento den není naplánováno žádné nabíjení ze sítě."}</p>
+          <p className="text-gray-600">
+            {message ||
+              "Pro tento den není naplánováno žádné nabíjení ze sítě."}
+          </p>
         </div>
       ) : (
         <>
           <div className="flex items-center justify-between mb-4">
-            <span className="text-sm text-gray-500">Celkové plánované nabíjení:</span>
-            <span className="text-xl font-bold text-blue-600">{totalCharging.toFixed(2)} kWh</span>
+            <span className="text-sm text-gray-500">
+              Celkové plánované nabíjení:
+            </span>
+            <span className="text-xl font-bold text-blue-600">
+              {totalCharging.toFixed(2)} kWh
+            </span>
           </div>
-          
+
           <div className="space-y-3">
             {scheduleData.map((item) => {
               const priceInfo = getPriceInfo(item.hour);
-              
+
               return (
-                <div 
-                  key={item.hour} 
+                <div
+                  key={item.hour}
                   className="border rounded-lg bg-gray-50 p-4 flex flex-col md:flex-row md:items-center md:justify-between"
                 >
                   <div className="flex items-center mb-2 md:mb-0">

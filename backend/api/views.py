@@ -250,7 +250,6 @@ def house_appliances(request, house_id):
                 'remaining_minutes_list', 'planned_starts',
                 'is_active', 'in_standby', 'remaining_minutes',
                 'next_start_time',
-                # Nová pole pro optimalizaci spotřeby
                 'priority_level', 'interruptible', 'inactive_windows'
             ))
             return JsonResponse({'appliances': appliances})
@@ -267,7 +266,6 @@ def house_appliances(request, house_id):
                 'name': data['name'],
                 'power_consumption': data['power_consumption'],
                 'appliance_type': data['appliance_type'],
-                # Přidaná nová pole s defaultními hodnotami, pokud nejsou poskytnuta
                 'priority_level': data.get('priority_level', 1),
                 'interruptible': data.get('interruptible', True),
             }

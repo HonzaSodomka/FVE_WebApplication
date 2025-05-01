@@ -87,7 +87,7 @@ def simulate_minute_consumption():
        current_minute = current_time.minute
        is_weekend = current_time.weekday() >= 5
        
-       # Zjištění speciálních domů
+       # Zjištění testovacích domů
        cur.execute("""
            SELECT id FROM api_house
            WHERE is_active = true AND id IN (9, 999, 9999, 99999)
@@ -148,8 +148,8 @@ def simulate_minute_consumption():
            # Vytvoření nového záznamu pro dům pokud neexistuje
            if house_id not in houses:
                houses[house_id] = {
-                   'appliances': [],  # Seznam spotřebičů
-                   'total_wh': 0      # Celková spotřeba ve Wh
+                   'appliances': [],
+                   'total_wh': 0
                }
            
            # Kontrola inactive_windows pro EXTREME domy
@@ -161,7 +161,6 @@ def simulate_minute_consumption():
                 
                # Kontrola, zda aktuální čas odpovídá oknu neaktivity
                for window in inactive_windows:
-                   # Formát s 'start_date' a 'end_date'
                    start_date = window.get('start_date')
                    end_date = window.get('end_date', start_date)  # Výchozí hodnota je start_date pokud end_date chybí
                    
@@ -188,13 +187,10 @@ def simulate_minute_consumption():
                    
                    # Zpracování oken přes půlnoc
                    if start_hour > end_hour:
-                       # Kontrola večerní nebo ranní části
                        if current_date == start_date_obj and current_hour >= start_hour:
-                           # Večerní část okna (první den)
                            is_inactive = True
                            break
                        elif current_date == end_date_obj and current_hour < end_hour:
-                           # Ranní část okna (druhý den)
                            is_inactive = True
                            break
                    else:
@@ -205,7 +201,6 @@ def simulate_minute_consumption():
                
            # Výpočet spotřeby podle typu spotřebiče
            if is_inactive:
-               # Spotřebič v neaktivním okně
                minute_consumption = 0
            elif app_type == 'CONSTANT':
                variation = random.uniform(0.9, 1.0)
@@ -264,7 +259,6 @@ def simulate_minute_consumption():
                    """, [appliance_id])
 
            elif app_type == 'SCHEDULED':
-               # Kontrola běžícího spotřebiče v neaktivním okně
                if remaining_minutes > 0:
                    is_extreme_house = house_id in extreme_house_ids
                    should_interrupt = False

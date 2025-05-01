@@ -9,7 +9,7 @@ logging.basicConfig(
     level=logging.INFO,
     format='[%(asctime)s] %(levelname)s: %(message)s',
     filename='/app/logs/django.log',  # Stejný soubor jako používá Django
-    filemode='a'  # 'a' znamená append - přidává záznamy na konec souboru
+    filemode='a'
 )
 
 logger = logging.getLogger('api')
@@ -52,7 +52,6 @@ def save_tomorrow_prices():
     )
     cur = conn.cursor()
     
-    # Zítřek = dnešek + 1 den
     tomorrow = date.today() + timedelta(days=1)
     logger.info(f"Ukládání spotových cen pro den {tomorrow}")
     

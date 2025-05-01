@@ -46,7 +46,7 @@ MIDDLEWARE = [
 
 # Nastavení sessions
 SESSION_ENGINE = 'django.contrib.sessions.backends.db'
-SESSION_COOKIE_AGE = 86400  # 24 hodin
+SESSION_COOKIE_AGE = 86400
 SESSION_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = 'Lax'
 SESSION_EXPIRE_AT_BROWSER_CLOSE = True
@@ -93,7 +93,7 @@ AUTH_PASSWORD_VALIDATORS = [
     {'NAME': 'django.contrib.auth.password_validation.NumericPasswordValidator'},
 ]
 
-# Internacionalizace
+# Lokalizace
 LANGUAGE_CODE = 'en-us'
 TIME_ZONE = 'Europe/Prague'
 USE_I18N = True

@@ -12,7 +12,7 @@ from typing import Callable, List
 logger = logging.getLogger('api')
 
 # Globální heslo pro přístup k aplikaci
-ACCESS_PASSWORD = "FVE.Bakalarka.2025"
+ACCESS_PASSWORD = "FVE2025"
 
 
 @csrf_exempt
